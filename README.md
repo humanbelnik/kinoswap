@@ -1,1 +1,1 @@
-# kinoswap
+# kinoswap - choose films together
