@@ -46,7 +46,6 @@ func (d *Driver) FindAndAcquire(ctx context.Context) (model.RoomID, error) {
 		WHERE id = (
 			SELECT id FROM rooms 
 			WHERE status = $2
-			ORDER BY created_at ASC 
 			FOR UPDATE SKIP LOCKED 
 			LIMIT 1
 		)
@@ -86,4 +85,12 @@ func (d *Driver) IsExistsRoomID(ctx context.Context, roomID model.RoomID) (bool,
 	}
 
 	return exists, nil
+}
+
+// Clear fields
+// Set status to Free
+// Add ID to a set of freeds
+func (d *Driver) ReleaseRoom(ctx context.Context, roomID model.RoomID) error {
+
+	return nil
 }
