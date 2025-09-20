@@ -1,9 +1,13 @@
 package app
 
 import (
+	"log/slog"
+
 	"github.com/humanbelnik/kinoswap/core/internal/config"
 	http_init "github.com/humanbelnik/kinoswap/core/internal/delivery/http/init"
 	http_room "github.com/humanbelnik/kinoswap/core/internal/delivery/http/room"
+	http_voting "github.com/humanbelnik/kinoswap/core/internal/delivery/http/voting"
+	ws_room "github.com/humanbelnik/kinoswap/core/internal/delivery/ws/room"
 	infra_pg_init "github.com/humanbelnik/kinoswap/core/internal/infra/postgres/init"
 	infra_postgres_room "github.com/humanbelnik/kinoswap/core/internal/infra/postgres/room"
 	infra_redis_init "github.com/humanbelnik/kinoswap/core/internal/infra/redis/init"
@@ -25,8 +29,11 @@ func Go(cfg *config.Config) {
 	roomStorage := storage_room.New(roomDB, roomIDSet)
 	roomUC := usecase_room.New(roomStorage)
 
+	hub := ws_room.New(slog.Default())
+
 	controllerPool := http_init.NewControllerPool()
-	controllerPool.Add(http_room.New(roomUC))
+	controllerPool.Add(http_room.New(roomUC, hub))
+	controllerPool.Add(http_voting.New(roomUC, hub))
 
 	controllerPool.Register()
 	controllerPool.RunAll(cfg.HTTP.Port)

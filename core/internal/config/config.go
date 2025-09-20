@@ -29,10 +29,16 @@ type Postgres struct {
 	SSLMode  string
 }
 
+type TelegramBot struct {
+	Token  string
+	Domain string
+}
+
 type Config struct {
-	HTTP     HTTPServer
-	Redis    RedisCache
-	Postgres Postgres
+	HTTP        HTTPServer
+	Redis       RedisCache
+	Postgres    Postgres
+	TelegramBot TelegramBot
 }
 
 const logtag = "[config]"
@@ -52,9 +58,10 @@ func Load() *Config {
 	}
 
 	cfg := &Config{
-		HTTP:     *newHTTP(),
-		Redis:    *newRedis(),
-		Postgres: *newPostgres(),
+		HTTP:        *newHTTP(),
+		Redis:       *newRedis(),
+		Postgres:    *newPostgres(),
+		TelegramBot: *newTelegramBot(),
 	}
 
 	log.Printf("%s backend config : %+v\n", logtag, cfg)
@@ -84,6 +91,13 @@ func newPostgres() *Postgres {
 		Password: getenv("DB_PASSWORD", "shared"),
 		DBName:   getenv("DB_NAME", "test"),
 		SSLMode:  getenv("DB_SSLMODE", "disable"),
+	}
+}
+
+func newTelegramBot() *TelegramBot {
+	return &TelegramBot{
+		Token:  getenv("TELEGRAM_TOKEN", ""),
+		Domain: getenv("TELEGRAM_DOMAIN", ""),
 	}
 }
 

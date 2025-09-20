@@ -13,6 +13,9 @@ type Repository interface {
 	FindAndAcquire(ctx context.Context) (model.RoomID, error)
 	TryAcquire(ctx context.Context, roomID model.RoomID) error
 	IsExistsRoomID(ctx context.Context, roomID model.RoomID) (bool, error)
+
+	IsRoomAcquired(ctx context.Context, roomID model.RoomID) (bool, error)
+	Participate(ctx context.Context, roomID model.RoomID, preference model.Preference) error
 }
 
 type IDCacheSet interface {
@@ -63,11 +66,6 @@ func (s *Storage) AcquireRoom(ctx context.Context) (model.RoomID, error) {
 	}
 	return roomID, s.repo.CreateAndAquire(ctx, roomID)
 }
-
-func (s *Storage) AddPreference(p model.Preferece) error {
-	return nil
-}
-
 func (s *Storage) resolveRoomID(ctx context.Context) (model.RoomID, error) {
 	var roomID model.RoomID
 	for {
@@ -93,4 +91,14 @@ func (s *Storage) buildRoomID() model.RoomID {
 	}
 
 	return builder.String()
+}
+
+func (s *Storage) Participate(ctx context.Context, roomID model.RoomID, p model.Preference) error {
+	return s.repo.Participate(ctx, roomID, p)
+}
+func (s *Storage) IsRoomAcquired(ctx context.Context, roomID model.RoomID) (bool, error) {
+	if ok, err := s.repo.IsRoomAcquired(ctx, roomID); !ok || err != nil {
+		return false, err
+	}
+	return true, nil
 }

@@ -12,7 +12,7 @@ services:
       - "5432:5432"
     volumes:
       - ./migration:/migration
-    
+
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
       interval: 1s
@@ -27,7 +27,7 @@ services:
     env_file:
       - .env
     environment:
-      DB_HOST: dev_db 
+      DB_HOST: dev_db
       DB_PORT: 5432
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
@@ -35,14 +35,14 @@ services:
       DB_SSLMODE: disable
     volumes:
       - ./migration:/migration
-    command: 
+    command:
       - "-path=/migration"
       - "-database=postgres://${DB_USER}:${DB_PASSWORD}@dev_db:5432/${DB_NAME}?sslmode=disable"
       - "up"
 
   redis:
     image: redis:7.2-alpine
-    container_name: redis
+    container_name: redis-kinoswap
     env_file:
       - .env
     restart: unless-stopped

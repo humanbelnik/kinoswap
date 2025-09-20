@@ -87,6 +87,44 @@ func (d *Driver) IsExistsRoomID(ctx context.Context, roomID model.RoomID) (bool,
 	return exists, nil
 }
 
+func (d *Driver) Participate(ctx context.Context, roomID model.RoomID, preference model.Preference) error {
+	const (
+		q = `
+		UPDATE rooms 
+		SET 
+			preferences = array_append(preferences, $1),
+			participants = participants + 1
+		WHERE id = $2 AND status = $3
+		`
+	)
+
+	res, err := d.db.ExecContext(ctx, q, preference.Text, string(roomID), RoomStatusAcquired)
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, _ := res.RowsAffected()
+	if rowsAffected == 0 {
+		return fmt.Errorf("room %s not found or not in acquired status", roomID)
+	}
+
+	return nil
+}
+
+func (d *Driver) IsRoomAcquired(ctx context.Context, roomID model.RoomID) (bool, error) {
+	const (
+		q = `SELECT EXISTS(SELECT 1 FROM rooms WHERE id = $1 AND status = $2)`
+	)
+
+	var exists bool
+	err := d.db.QueryRowContext(ctx, q, string(roomID), RoomStatusAcquired).Scan(&exists)
+	if err != nil {
+		return false, err
+	}
+
+	return exists, nil
+}
+
 // Clear fields
 // Set status to Free
 // Add ID to a set of freeds

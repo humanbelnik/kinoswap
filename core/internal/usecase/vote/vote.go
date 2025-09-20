@@ -1,0 +1,43 @@
+package usecase_vote
+
+import (
+	"context"
+	"errors"
+	"fmt"
+
+	"github.com/humanbelnik/kinoswap/core/internal/model"
+)
+
+var (
+	ErrUnableToSaveVotes  = errors.New("unable to vote")
+	ErrUnableToGetResults = errors.New("unable to get results")
+	ErrNoCommon           = errors.New("no common films")
+)
+
+type VoteRepository interface {
+	AddVote(ctx context.Context, results model.VoteResult) error
+	LoadResults(ctx context.Context, roomID model.RoomID) ([]*model.MovieMeta, error)
+}
+
+type Usecase struct {
+	voteRepository VoteRepository
+}
+
+func (u *Usecase) Vote(ctx context.Context, results model.VoteResult) error {
+	if err := u.voteRepository.AddVote(ctx, results); err != nil {
+		return fmt.Errorf("%w : %w", ErrUnableToSaveVotes, err)
+	}
+
+	return nil
+}
+
+func (u *Usecase) Results(ctx context.Context, roomID model.RoomID) ([]*model.MovieMeta, error) {
+	results, err := u.voteRepository.LoadResults(ctx, roomID)
+	if err != nil {
+		return nil, fmt.Errorf("%w:%w", ErrUnableToGetResults, err)
+	}
+	if len(results) == 0 {
+		return nil, ErrNoCommon
+	}
+	return results, nil
+}
