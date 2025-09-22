@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand"
+	"strings"
 
 	"github.com/humanbelnik/kinoswap/core/internal/model"
 )
@@ -16,10 +18,19 @@ var (
 	ErrFailedToStoreEmbedding = errors.New("failed to store embedding")
 )
 
-type RoomStorage interface {
-	AcquireRoom(ctx context.Context) (model.RoomID, error)
-	Participate(ctx context.Context, roomID model.RoomID, p model.Preference) error
+type Repository interface {
+	CreateAndAquire(ctx context.Context, roomID model.RoomID) error
+	FindAndAcquire(ctx context.Context) (model.RoomID, error)
+	TryAcquire(ctx context.Context, roomID model.RoomID) error
+	IsExistsRoomID(ctx context.Context, roomID model.RoomID) (bool, error)
+
 	IsRoomAcquired(ctx context.Context, roomID model.RoomID) (bool, error)
+	Participate(ctx context.Context, roomID model.RoomID, preference model.Preference) error
+}
+
+type IDCacheSet interface {
+	Remove(ctx context.Context) (model.RoomID, error)
+	Add(ctx context.Context, roomID model.RoomID) error
 }
 
 type Embedder interface {
@@ -27,30 +38,46 @@ type Embedder interface {
 }
 
 type EmbeddingStorer interface {
-	Store(ctx context.Context, roomID model.RoomID, e model.Embedding) error
+	Store(ctx context.Context, roomID model.EID, e model.Embedding) error
 }
 
 type Usecase struct {
-	storage         RoomStorage
+	repo       Repository
+	idCahceSet IDCacheSet
+
 	embedder        Embedder
 	embeddingStorer EmbeddingStorer
 }
 
-func New(storage RoomStorage, embedder Embedder, embeddingStorer EmbeddingStorer) *Usecase {
+func New(repo Repository, embedder Embedder, embeddingStorer EmbeddingStorer, idCacheSet IDCacheSet) *Usecase {
 	return &Usecase{
-		storage:         storage,
+		repo:            repo,
 		embedder:        embedder,
 		embeddingStorer: embeddingStorer,
+		idCahceSet:      idCacheSet,
 	}
 }
 
 func (u *Usecase) AcquireRoom(ctx context.Context) (model.RoomID, error) {
-	roomID, err := u.storage.AcquireRoom(ctx)
-	if err != nil {
-		return model.EmptyRoomID, fmt.Errorf("%w:%w", ErrCreate, err)
+	roomID, _ := u.idCahceSet.Remove(ctx)
+	if roomID != model.EmptyRoomID {
+		// Fast path
+		if err := u.repo.TryAcquire(ctx, roomID); err == nil {
+			return roomID, nil
+		}
+	}
+	// Slower path
+	roomID, _ = u.repo.FindAndAcquire(ctx)
+	if roomID != model.EmptyRoomID {
+		return roomID, nil
 	}
 
-	return roomID, nil
+	// Slowest path
+	roomID, err := u.resolveRoomID(ctx)
+	if err != nil {
+		return model.EmptyRoomID, err
+	}
+	return roomID, u.repo.CreateAndAquire(ctx, roomID)
 }
 
 func (u *Usecase) ReleaseRoom(ctx context.Context, roomID model.RoomID) error {
@@ -59,7 +86,7 @@ func (u *Usecase) ReleaseRoom(ctx context.Context, roomID model.RoomID) error {
 }
 
 func (u *Usecase) Participate(ctx context.Context, roomID model.RoomID, p model.Preference) error {
-	if err := u.storage.Participate(ctx, roomID, p); err != nil {
+	if err := u.repo.Participate(ctx, roomID, p); err != nil {
 		return fmt.Errorf("%w:%w", ErrParticipate, err)
 	}
 
@@ -68,7 +95,7 @@ func (u *Usecase) Participate(ctx context.Context, roomID model.RoomID, p model.
 		return fmt.Errorf("%w:%w", ErrBuildEmbedding, err)
 	}
 
-	if err := u.embeddingStorer.Store(ctx, roomID, model.Embedding{E: prefEmbedding}); err != nil {
+	if err := u.embeddingStorer.Store(ctx, roomID, model.Embedding(prefEmbedding)); err != nil {
 		return fmt.Errorf("%w:%w", ErrFailedToStoreEmbedding, err)
 	}
 
@@ -76,5 +103,35 @@ func (u *Usecase) Participate(ctx context.Context, roomID model.RoomID, p model.
 }
 
 func (u *Usecase) IsRoomAcquired(ctx context.Context, roomID model.RoomID) (bool, error) {
-	return u.storage.IsRoomAcquired(ctx, roomID)
+	if ok, err := u.repo.IsRoomAcquired(ctx, roomID); !ok || err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func (u *Usecase) resolveRoomID(ctx context.Context) (model.RoomID, error) {
+	var roomID model.RoomID
+	for {
+		roomID = u.buildRoomID()
+		exists, err := u.repo.IsExistsRoomID(ctx, roomID)
+		if err != nil {
+			return model.EmptyRoomID, err
+		}
+		if !exists {
+			break
+		}
+	}
+	return roomID, nil
+}
+
+func (u *Usecase) buildRoomID() model.RoomID {
+	const codeLen = 6
+	var builder strings.Builder
+	builder.Grow(codeLen)
+
+	for range codeLen {
+		builder.WriteByte(byte(rand.Intn(10)) + '0')
+	}
+
+	return builder.String()
 }

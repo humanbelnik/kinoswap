@@ -21,10 +21,10 @@ type MovieMeta struct {
 	Overview string
 }
 
-type Embedding struct {
-	ID uuid.UUID
-	E  []byte
-}
+type Embedding []byte
+
+// Embedding ID
+type EID any
 
 type Reaction = bool
 

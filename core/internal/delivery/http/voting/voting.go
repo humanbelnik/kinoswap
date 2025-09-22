@@ -6,12 +6,11 @@ import (
 
 	"github.com/gin-gonic/gin"
 	ws_room "github.com/humanbelnik/kinoswap/core/internal/delivery/ws/room"
-	"github.com/humanbelnik/kinoswap/core/internal/model"
-	usecase_room "github.com/humanbelnik/kinoswap/core/internal/usecase/room"
+	usecase_vote "github.com/humanbelnik/kinoswap/core/internal/usecase/vote"
 )
 
 type Controller struct {
-	uc  *usecase_room.Usecase
+	uc  *usecase_vote.Usecase
 	hub *ws_room.Hub
 
 	logger *slog.Logger
@@ -25,7 +24,7 @@ func WithLogger(logger *slog.Logger) ControllerOption {
 	}
 }
 
-func New(uc *usecase_room.Usecase,
+func New(uc *usecase_vote.Usecase,
 	hub *ws_room.Hub,
 	opts ...ControllerOption) *Controller {
 	c := &Controller{
@@ -43,11 +42,11 @@ func (c *Controller) RegisterRoutes(router *gin.RouterGroup) {
 	voting := router.Group("rooms/:room_id/voting")
 	voting.POST("/votes", c.vote)
 	voting.POST("/start", c.startVoting)
+
 	voting.POST("/finish", c.finishVoting)
 	voting.GET("/results", c.votingResults)
 	voting.POST("/restart", c.restartVoting)
 	voting.POST("/continue", c.continueVoting)
-	voting.GET("/cards", c.cards)
 }
 
 // @Summary Start voting session
@@ -63,19 +62,6 @@ func (c *Controller) RegisterRoutes(router *gin.RouterGroup) {
 // @Router /rooms/{room_id}/voting/start [post]
 func (c *Controller) startVoting(ctx *gin.Context) {
 	roomID := ctx.Param("room_id")
-
-	exists, err := c.uc.IsRoomAcquired(ctx.Request.Context(), model.RoomID(roomID))
-	if err != nil {
-		c.logger.Error("failed to check room existence",
-			slog.String("error", err.Error()),
-		)
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
-		return
-	}
-	if !exists {
-		ctx.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
-		return
-	}
 
 	votingID := roomID
 

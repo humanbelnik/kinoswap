@@ -53,8 +53,8 @@ func (c *Controller) RegisterRoutes(router *gin.RouterGroup) {
 	room := router.Group("rooms/:room_id")
 	room.GET("/ws", c.roomWS)
 	room.GET("/acquired", c.isRoomAcquired)
-	room.PATCH("/participate", c.participate)
-	room.PATCH("/release", c.release)
+	room.POST("/participate", c.participate)
+	room.POST("/release", c.release)
 }
 
 func (c *Controller) acquireRoom(ctx *gin.Context) {

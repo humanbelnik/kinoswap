@@ -15,7 +15,7 @@ var (
 )
 
 type VoteRepository interface {
-	AddVote(ctx context.Context, results model.VoteResult) error
+	AddVote(ctx context.Context, roomID model.RoomID, results model.VoteResult) error
 	LoadResults(ctx context.Context, roomID model.RoomID) ([]*model.MovieMeta, error)
 }
 
@@ -23,8 +23,16 @@ type Usecase struct {
 	voteRepository VoteRepository
 }
 
-func (u *Usecase) Vote(ctx context.Context, results model.VoteResult) error {
-	if err := u.voteRepository.AddVote(ctx, results); err != nil {
+func New(
+	r VoteRepository,
+) *Usecase {
+	return &Usecase{
+		voteRepository: r,
+	}
+}
+
+func (u *Usecase) Vote(ctx context.Context, roomID model.RoomID, results model.VoteResult) error {
+	if err := u.voteRepository.AddVote(ctx, roomID, results); err != nil {
 		return fmt.Errorf("%w : %w", ErrUnableToSaveVotes, err)
 	}
 
