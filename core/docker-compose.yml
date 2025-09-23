@@ -1,6 +1,6 @@
 services:
   dev_db:
-    image: postgres:13-alpine
+    image: pgvector/pgvector:pg16
     container_name: ${DB_NAME}
     env_file:
       - .env

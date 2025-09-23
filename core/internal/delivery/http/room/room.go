@@ -101,7 +101,7 @@ func (c *Controller) participate(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "incorrect request"})
 		return
 	}
-	err := c.uc.Participate(ctx.Request.Context(), roomID, model.Preference{
+	err := c.uc.Participate(ctx.Request.Context(), model.RoomID(roomID), model.Preference{
 		Text: req.Text,
 	})
 	if err != nil {
@@ -144,7 +144,7 @@ func (c *Controller) roomWS(ctx *gin.Context) {
 		Hub:    c.hub,
 		Conn:   conn,
 		Send:   make(chan []byte, 256),
-		RoomID: roomID,
+		RoomID: model.RoomID(roomID),
 	}
 
 	c.hub.RegisterClient(client)

@@ -23,40 +23,40 @@ var (
 )
 
 type Embedder interface {
-	Embed(ctx context.Context, v any) ([]byte, error)
+	EmbedMovie(ctx context.Context, ID uuid.UUID, v model.MovieMeta) error
 }
 
-type MetaRepository interface {
+type Repository interface {
 	Store(ctx context.Context, mm model.MovieMeta) error
 	Load(ctx context.Context) ([]*model.MovieMeta, error)
 	LoadByID(ctx context.Context, ID uuid.UUID) (model.MovieMeta, error)
 	LoadByIDs(ctx context.Context, IDs []uuid.UUID) ([]*model.MovieMeta, error)
 	Update(ctx context.Context, mm model.MovieMeta) error
 	DeleteByID(ctx context.Context, ID uuid.UUID) error
+	UpdateEmbedding(ctx context.Context, ID uuid.UUID, e model.Embedding) error
+
+	KNN(ctx context.Context, k int, e model.Embedding) ([]*model.MovieMeta, error)
 }
 
 type EmbeddingRepository interface {
-	Store(ctx context.Context, ID model.EID, E model.Embedding) error
-	Load(ctx context.Context, ID model.EID) (model.Embedding, error)
-	Delete(ctx context.Context, ID model.EID) error
-	KNN(ctx context.Context, K int, E model.Embedding) ([]model.EID, error)
+	Load(ctx context.Context, ID uuid.UUID) (model.Embedding, error)
 }
 
 type Usecase struct {
 	embedder            Embedder
-	metaRepository      MetaRepository
+	repository          Repository
 	embeddingRepository EmbeddingRepository
 }
 
 func New(
 	embedder Embedder,
-	meta MetaRepository,
+	meta Repository,
 	embeddingRepo EmbeddingRepository,
 
 ) *Usecase {
 	return &Usecase{
 		embedder:            embedder,
-		metaRepository:      meta,
+		repository:          meta,
 		embeddingRepository: embeddingRepo,
 	}
 }
@@ -67,77 +67,39 @@ func (u *Usecase) TopK(ctx context.Context, roomID model.RoomID, K int) ([]*mode
 	}
 
 	// Get unite preference embedding (UPE) by roomID
-	prefEmbedding, err := u.embeddingRepository.Load(ctx, roomID)
+	prefEmbedding, err := u.embeddingRepository.Load(ctx, roomID.BuildUUID())
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrFailedToGetPreferenceEmbedding, err)
 	}
 
 	// Find KNN to UPE and return their IDs
-	similarMovieIDs, err := u.embeddingRepository.KNN(ctx, K, prefEmbedding)
+	mm, err := u.repository.KNN(ctx, K, prefEmbedding)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrFailedToFindKNN, err)
 	}
 
-	uuids := make([]uuid.UUID, len(similarMovieIDs))
-
-	for i, id := range similarMovieIDs {
-		if v, ok := id.(uuid.UUID); ok {
-			uuids[i] = v
-		} else {
-			return nil, ErrTypeCastFailed
-		}
-	}
-
-	// Fetch meta by IDs
-	metaList, err := u.metaRepository.LoadByIDs(ctx, uuids)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrFailedToLoadMeta, err)
-	}
-
-	return metaList, nil
+	return mm, nil
 }
 
 func (u *Usecase) Upload(ctx context.Context, mm model.MovieMeta) error {
-	if mm.ID == uuid.Nil {
-		return fmt.Errorf("%w: movie ID cannot be nil", ErrInvalidInput)
-	}
-
 	if mm.Title == "" {
 		return fmt.Errorf("%w: movie title cannot be empty", ErrInvalidInput)
 	}
 
-	// Get its embedding
-	embeddingBytes, err := u.embedder.Embed(ctx, mm)
-	if err != nil {
-		return fmt.Errorf("%w: %w", ErrFailedToGetEmbedding, err)
-	}
-
 	// Store meta in MetaRepository
-	if err := u.metaRepository.Store(ctx, mm); err != nil {
+	if err := u.repository.Store(ctx, mm); err != nil {
 		return fmt.Errorf("%w: %w", ErrFailedToStoreMeta, err)
 	}
 
-	// Store embedding in EmbeddingRepository
-	if err := u.embeddingRepository.Store(ctx, mm.ID, model.Embedding(embeddingBytes)); err != nil {
-		// Attempt to cleanup meta if embedding storage fails
-		if deleteErr := u.metaRepository.DeleteByID(ctx, mm.ID); deleteErr != nil {
-			return fmt.Errorf(
-				"failed to store embedding and cleanup meta: %w, cleanup error: %w",
-				err, deleteErr,
-			)
-		}
-		return fmt.Errorf("%w: %w", ErrFailedToStoreEmbedding, err)
-	}
+	//TODO
+	// Call async
+	u.embedder.EmbedMovie(ctx, mm.ID, mm)
 
 	return nil
 }
 
 func (u *Usecase) GetMovieByID(ctx context.Context, id uuid.UUID) (model.MovieMeta, error) {
-	if id == uuid.Nil {
-		return model.MovieMeta{}, fmt.Errorf("%w: movie ID cannot be nil", ErrInvalidInput)
-	}
-
-	meta, err := u.metaRepository.LoadByID(ctx, id)
+	meta, err := u.repository.LoadByID(ctx, id)
 	if err != nil {
 		return model.MovieMeta{}, fmt.Errorf("%w: %w", ErrFailedToLoadMeta, err)
 	}
@@ -146,17 +108,7 @@ func (u *Usecase) GetMovieByID(ctx context.Context, id uuid.UUID) (model.MovieMe
 }
 
 func (u *Usecase) DeleteMovie(ctx context.Context, id uuid.UUID) error {
-	if id == uuid.Nil {
-		return fmt.Errorf("%w: movie ID cannot be nil", ErrInvalidInput)
-	}
-
-	// Delete embedding first
-	if err := u.embeddingRepository.Delete(ctx, id); err != nil {
-		return fmt.Errorf("failed to delete embedding: %w", err)
-	}
-
-	// Delete meta
-	if err := u.metaRepository.DeleteByID(ctx, id); err != nil {
+	if err := u.repository.DeleteByID(ctx, id); err != nil {
 		return fmt.Errorf("failed to delete meta: %w", err)
 	}
 
@@ -164,32 +116,28 @@ func (u *Usecase) DeleteMovie(ctx context.Context, id uuid.UUID) error {
 }
 
 func (u *Usecase) UpdateMovie(ctx context.Context, mm model.MovieMeta) error {
-	if mm.ID == uuid.Nil {
-		return fmt.Errorf("%w: movie ID cannot be nil", ErrInvalidInput)
-	}
-
-	// Update meta first
-	if err := u.metaRepository.Update(ctx, mm); err != nil {
+	if err := u.repository.Update(ctx, mm); err != nil {
 		return fmt.Errorf("failed to update meta: %w", err)
 	}
 
-	// Regenerate and update embedding
-	embeddingBytes, err := u.embedder.Embed(ctx, mm)
-	if err != nil {
-		return fmt.Errorf("%w: %w", ErrFailedToGetEmbedding, err)
-	}
-
-	if err := u.embeddingRepository.Store(ctx, mm.ID, model.Embedding(embeddingBytes)); err != nil {
-		return fmt.Errorf("failed to update embedding: %w", err)
-	}
-
+	//TODO
+	// Call async
+	u.embedder.EmbedMovie(ctx, mm.ID, mm)
 	return nil
 }
 
 func (u *Usecase) Load(ctx context.Context) ([]*model.MovieMeta, error) {
-	mm, err := u.metaRepository.Load(ctx)
+	mm, err := u.repository.Load(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("%w:%w", ErrFailedToLoadMeta, err)
 	}
 	return mm, nil
+}
+
+func (u *Usecase) AddEmbedding(ctx context.Context, ID uuid.UUID, e model.Embedding) error {
+	if err := u.repository.UpdateEmbedding(ctx, ID, e); err != nil {
+		return fmt.Errorf("%w:%w", ErrFailedToStoreEmbedding, err)
+	}
+
+	return nil
 }

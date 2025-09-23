@@ -25,7 +25,7 @@ type Client struct {
 	Hub    *Hub
 	Conn   *websocket.Conn
 	Send   chan []byte
-	RoomID string
+	RoomID model.RoomID
 }
 
 type Hub struct {
@@ -69,7 +69,7 @@ func (h *Hub) RemoveClient(client *Client) {
 	h.logger.Info("client unregistered", "room_id", client.RoomID)
 }
 
-func (h *Hub) BroadcastToRoom(roomID string, message Message) {
+func (h *Hub) BroadcastToRoom(roomID model.RoomID, message Message) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 

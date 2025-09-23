@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	ws_room "github.com/humanbelnik/kinoswap/core/internal/delivery/ws/room"
+	"github.com/humanbelnik/kinoswap/core/internal/model"
 	usecase_vote "github.com/humanbelnik/kinoswap/core/internal/usecase/vote"
 )
 
@@ -73,7 +74,7 @@ func (c *Controller) startVoting(ctx *gin.Context) {
 			"redirect_to": "/voting/" + votingID,
 		},
 	}
-	c.hub.BroadcastToRoom(roomID, m)
+	c.hub.BroadcastToRoom(model.RoomID(roomID), m)
 
 	ctx.JSON(http.StatusOK, gin.H{
 		"voting_id": votingID,

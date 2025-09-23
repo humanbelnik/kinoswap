@@ -129,6 +129,5 @@ func (d *Driver) IsRoomAcquired(ctx context.Context, roomID model.RoomID) (bool,
 // Set status to Free
 // Add ID to a set of freeds
 func (d *Driver) ReleaseRoom(ctx context.Context, roomID model.RoomID) error {
-
 	return nil
 }

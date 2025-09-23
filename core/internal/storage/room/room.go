@@ -90,7 +90,7 @@ func (s *Storage) buildRoomID() model.RoomID {
 		builder.WriteByte(byte(rand.Intn(10)) + '0')
 	}
 
-	return builder.String()
+	return model.RoomID(builder.String())
 }
 
 func (s *Storage) Participate(ctx context.Context, roomID model.RoomID, p model.Preference) error {

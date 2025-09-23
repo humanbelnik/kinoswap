@@ -2,9 +2,13 @@ package model
 
 import "github.com/google/uuid"
 
-type RoomID = string
+type RoomID string
 
 const EmptyRoomID RoomID = ""
+
+func (id RoomID) BuildUUID() uuid.UUID {
+	return uuid.NewSHA1(uuid.NameSpaceURL, []byte(id))
+}
 
 type Preference struct {
 	Text string
@@ -21,10 +25,7 @@ type MovieMeta struct {
 	Overview string
 }
 
-type Embedding []byte
-
-// Embedding ID
-type EID any
+type Embedding []float32
 
 type Reaction = bool
 

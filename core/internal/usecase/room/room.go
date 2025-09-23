@@ -7,6 +7,7 @@ import (
 	"math/rand"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/humanbelnik/kinoswap/core/internal/model"
 )
 
@@ -34,11 +35,11 @@ type IDCacheSet interface {
 }
 
 type Embedder interface {
-	Embed(ctx context.Context, v any) ([]byte, error)
+	EmbedPreference(ctx context.Context, ID uuid.UUID, P model.Preference) error
 }
 
 type EmbeddingStorer interface {
-	Store(ctx context.Context, roomID model.EID, e model.Embedding) error
+	Store(ctx context.Context, roomID uuid.UUID, e model.Embedding) error
 }
 
 type Usecase struct {
@@ -90,14 +91,7 @@ func (u *Usecase) Participate(ctx context.Context, roomID model.RoomID, p model.
 		return fmt.Errorf("%w:%w", ErrParticipate, err)
 	}
 
-	prefEmbedding, err := u.embedder.Embed(ctx, p)
-	if err != nil {
-		return fmt.Errorf("%w:%w", ErrBuildEmbedding, err)
-	}
-
-	if err := u.embeddingStorer.Store(ctx, roomID, model.Embedding(prefEmbedding)); err != nil {
-		return fmt.Errorf("%w:%w", ErrFailedToStoreEmbedding, err)
-	}
+	u.embedder.EmbedPreference(ctx, roomID.BuildUUID(), p)
 
 	return nil
 }
@@ -133,5 +127,5 @@ func (u *Usecase) buildRoomID() model.RoomID {
 		builder.WriteByte(byte(rand.Intn(10)) + '0')
 	}
 
-	return builder.String()
+	return model.RoomID(builder.String())
 }

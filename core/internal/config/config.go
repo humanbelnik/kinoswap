@@ -34,11 +34,17 @@ type TelegramBot struct {
 	Domain string
 }
 
+type Qdrant struct {
+	Host string
+	Port string
+}
+
 type Config struct {
 	HTTP        HTTPServer
 	Redis       RedisCache
 	Postgres    Postgres
 	TelegramBot TelegramBot
+	Qdrant      Qdrant
 }
 
 const logtag = "[config]"
@@ -62,6 +68,7 @@ func Load() *Config {
 		Redis:       *newRedis(),
 		Postgres:    *newPostgres(),
 		TelegramBot: *newTelegramBot(),
+		Qdrant:      *newQdrant(),
 	}
 
 	log.Printf("%s backend config : %+v\n", logtag, cfg)
@@ -72,6 +79,13 @@ func newHTTP() *HTTPServer {
 	return &HTTPServer{
 		Port: getenv("HTTP_PORT", "8080"),
 		Host: getenv("HTTP_HOST", "localhost"),
+	}
+}
+
+func newQdrant() *Qdrant {
+	return &Qdrant{
+		Port: getenv("QDRANT_PORT", "6333"),
+		Host: getenv("QDRANT_HOST", "localhost"),
 	}
 }
 
