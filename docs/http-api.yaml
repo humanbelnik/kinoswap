@@ -1,0 +1,155 @@
+openapi: "3.1.1"
+info:
+  title: Kinoswap backend API
+  version: "1.0"
+servers:
+  - url: http://localhost:8080/api/v1
+paths:
+  /rooms:
+    get:
+      summary: Acquire room
+      responses:
+        "200":
+          description: Successful request
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  room_id:
+                    type: string
+                    example: "003233"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /rooms/{room_id}/acquired:
+    get:
+      summary: Check if room is acquired
+      parameters:
+        - name: room_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Room identifier
+      responses:
+        "200":
+          description: Room exists and is acquired
+        "404":
+          description: Room not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatusNotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /rooms/{room_id}/participate:
+    post:
+      summary: Upload your preferences for voting
+      parameters:
+        - name: room_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Room identifier
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                text:
+                  type: string
+                  description: Preference text
+              required:
+                - text
+            example:
+              text: "Japanese horror from 20s"
+      responses:
+        "201":
+          description: Successfully participated in room
+        "400":
+          description: Incorrect request format
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Room not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /rooms/{room_id}/release:
+    post:
+      summary: Release room
+      parameters:
+        - name: room_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Room identifier
+      responses:
+        "200":
+          description: Room successfully released
+        "404":
+          description: Room not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+components:
+  schemas:
+    Error:
+      type: object
+      properties:
+        message:
+          type: string
+      example:
+        message: "error description"
+
+  responses:
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"  
+
+    StatusNotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+    StatusUnauthorized:
+      description: Unauthorized access
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+    StatusOK:
+      description: Successful operation
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+    StatusCreated:
+      description: Resource created successfully
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
