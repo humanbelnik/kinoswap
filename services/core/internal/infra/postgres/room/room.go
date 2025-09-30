@@ -87,7 +87,7 @@ func (d *Driver) IsExistsRoomID(ctx context.Context, roomID model.RoomID) (bool,
 	return exists, nil
 }
 
-func (d *Driver) Participate(ctx context.Context, roomID model.RoomID, preference model.Preference) error {
+func (d *Driver) AppendPreference(ctx context.Context, roomID model.RoomID, preference model.Preference) error {
 	const (
 		q = `
 		UPDATE rooms 

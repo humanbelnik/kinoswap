@@ -10,23 +10,17 @@ import (
 )
 
 var (
-	ErrFailedToFetchCards             = errors.New("failed to fetch cards")
-	ErrFailedToGetEmbedding           = errors.New("failed to get embedding")
-	ErrFailedToStoreMeta              = errors.New("failed to store meta")
-	ErrFailedToStoreEmbedding         = errors.New("failed to store embedding")
-	ErrFailedToLoadMeta               = errors.New("failed to load meta")
-	ErrFailedToFindKNN                = errors.New("failed to find KNN")
-	ErrInvalidInput                   = errors.New("invalid input")
-	ErrRoomNotFound                   = errors.New("room not found")
-	ErrFailedToGetPreferenceEmbedding = errors.New("failed to get preference embedding")
-	ErrTypeCastFailed                 = errors.New("id type cast failed")
+	ErrInvalidInput           = errors.New("invalid input")
+	ErrFailedToStoreMeta      = errors.New("failed to store meta")
+	ErrFailedToLoadMeta       = errors.New("failed to load meta")
+	ErrFailedToUpdateMeta     = errors.New("failed to update meta")
+	ErrFailedToDeleteMeta     = errors.New("failed to delete meta")
+	ErrFailedToGetPreferences = errors.New("failed to get preferences")
+	ErrFailedToKNN            = errors.New("failed to KNN")
+	ErrFailedToReduce         = errors.New("failed to reduce")
 )
 
-type Embedder interface {
-	EmbedMovie(ctx context.Context, ID uuid.UUID, v model.MovieMeta) error
-}
-
-type Repository interface {
+type MovieRepository interface {
 	Store(ctx context.Context, mm model.MovieMeta) error
 	Load(ctx context.Context) ([]*model.MovieMeta, error)
 	LoadByID(ctx context.Context, ID uuid.UUID) (model.MovieMeta, error)
@@ -38,62 +32,100 @@ type Repository interface {
 	KNN(ctx context.Context, k int, e model.Embedding) ([]*model.MovieMeta, error)
 }
 
+type Embedder interface {
+	BuildMovieEmbedding(ctx context.Context, mm model.MovieMeta) (model.Embedding, error)
+}
+
 type EmbeddingRepository interface {
-	Load(ctx context.Context, ID uuid.UUID) (model.Embedding, error)
+	Store(ctx context.Context, movieID uuid.UUID, e model.Embedding) error
+	LoadPreferenceEmbeddings(ctx context.Context, roomID model.RoomID) ([]*model.Embedding, error)
+}
+
+type EmbeddingReducer interface {
+	Reduce(ems []*model.Embedding) model.Embedding
 }
 
 type Usecase struct {
 	embedder            Embedder
-	repository          Repository
+	repository          MovieRepository
 	embeddingRepository EmbeddingRepository
+	embeddingReducer    EmbeddingReducer
 }
 
 func New(
 	embedder Embedder,
-	meta Repository,
+	meta MovieRepository,
 	embeddingRepo EmbeddingRepository,
-
+	embeddingReducer EmbeddingReducer,
 ) *Usecase {
 	return &Usecase{
 		embedder:            embedder,
 		repository:          meta,
 		embeddingRepository: embeddingRepo,
+		embeddingReducer:    embeddingReducer,
 	}
 }
 
-func (u *Usecase) TopK(ctx context.Context, roomID model.RoomID, K int) ([]*model.MovieMeta, error) {
+func (u *Usecase) KMostRelevantMovies(ctx context.Context, roomID model.RoomID, K int) ([]*model.MovieMeta, error) {
 	if K <= 0 {
 		return nil, fmt.Errorf("%w: K must be positive", ErrInvalidInput)
 	}
 
-	// Get unite preference embedding (UPE) by roomID
-	prefEmbedding, err := u.embeddingRepository.Load(ctx, roomID.BuildUUID())
+	prefs, err := u.embeddingRepository.LoadPreferenceEmbeddings(ctx, roomID)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrFailedToGetPreferenceEmbedding, err)
+		return nil, fmt.Errorf("%w:%w", ErrFailedToGetPreferences, err)
 	}
 
-	// Find KNN to UPE and return their IDs
-	mm, err := u.repository.KNN(ctx, K, prefEmbedding)
+	reducedPref, err := func() (model.Embedding, error) {
+		defer func() {
+			if r := recover(); r != nil {
+				err = ErrFailedToReduce
+			}
+		}()
+		reducedPref := u.embeddingReducer.Reduce(prefs)
+		return reducedPref, err
+	}()
+
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrFailedToFindKNN, err)
+		return nil, err
 	}
 
-	return mm, nil
+	mms, err := u.repository.KNN(ctx, K, reducedPref)
+	if err != nil {
+		return nil, fmt.Errorf("%w:%w", ErrFailedToKNN, err)
+	}
+
+	return mms, nil
 }
 
 func (u *Usecase) Upload(ctx context.Context, mm model.MovieMeta) error {
-	if mm.Title == "" {
-		return fmt.Errorf("%w: movie title cannot be empty", ErrInvalidInput)
+	if mm.Title == model.EmptyTitle {
+		return ErrInvalidInput
 	}
 
-	// Store meta in MetaRepository
 	if err := u.repository.Store(ctx, mm); err != nil {
 		return fmt.Errorf("%w: %w", ErrFailedToStoreMeta, err)
 	}
 
-	//TODO
-	// Call async
-	u.embedder.EmbedMovie(ctx, mm.ID, mm)
+	var err error
+	go func() {
+		defer func() {
+			if err != nil {
+				if err := u.repository.DeleteByID(ctx, mm.ID); err != nil {
+					//! Logging here
+				}
+			}
+		}()
+
+		ctx := context.Background()
+		e, err := u.embedder.BuildMovieEmbedding(ctx, mm)
+		if err != nil {
+			return
+		}
+		if err := u.embeddingRepository.Store(ctx, mm.ID, e); err != nil {
+			return
+		}
+	}()
 
 	return nil
 }
@@ -109,7 +141,7 @@ func (u *Usecase) GetMovieByID(ctx context.Context, id uuid.UUID) (model.MovieMe
 
 func (u *Usecase) DeleteMovie(ctx context.Context, id uuid.UUID) error {
 	if err := u.repository.DeleteByID(ctx, id); err != nil {
-		return fmt.Errorf("failed to delete meta: %w", err)
+		return fmt.Errorf("%w : %w", ErrFailedToDeleteMeta, err)
 	}
 
 	return nil
@@ -117,12 +149,25 @@ func (u *Usecase) DeleteMovie(ctx context.Context, id uuid.UUID) error {
 
 func (u *Usecase) UpdateMovie(ctx context.Context, mm model.MovieMeta) error {
 	if err := u.repository.Update(ctx, mm); err != nil {
-		return fmt.Errorf("failed to update meta: %w", err)
+		return fmt.Errorf("%w : %w", ErrFailedToUpdateMeta, err)
 	}
 
-	//TODO
-	// Call async
-	u.embedder.EmbedMovie(ctx, mm.ID, mm)
+	go func() {
+		/*
+			Don't use parent HTTP context on async tasks.
+			Parent context cancels when response is made.
+		*/
+		ctx := context.Background()
+		e, err := u.embedder.BuildMovieEmbedding(ctx, mm)
+		if err != nil {
+			//! Logging
+			return
+		}
+		if err := u.embeddingRepository.Store(ctx, mm.ID, e); err != nil {
+			//! Logging
+			return
+		}
+	}()
 	return nil
 }
 
@@ -132,12 +177,4 @@ func (u *Usecase) Load(ctx context.Context) ([]*model.MovieMeta, error) {
 		return nil, fmt.Errorf("%w:%w", ErrFailedToLoadMeta, err)
 	}
 	return mm, nil
-}
-
-func (u *Usecase) AddEmbedding(ctx context.Context, ID uuid.UUID, e model.Embedding) error {
-	if err := u.repository.UpdateEmbedding(ctx, ID, e); err != nil {
-		return fmt.Errorf("%w:%w", ErrFailedToStoreEmbedding, err)
-	}
-
-	return nil
 }

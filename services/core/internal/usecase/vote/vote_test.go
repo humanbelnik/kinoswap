@@ -20,6 +20,10 @@ type UsecaseVoteUnitSuite struct {
 	ctx      context.Context
 }
 
+/*
+'Object Mother' pattern example
+aka cooks specific objects.
+*/
 func validRoomID() model.RoomID {
 	return model.RoomID("123456")
 }

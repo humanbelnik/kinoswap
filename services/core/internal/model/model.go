@@ -14,6 +14,8 @@ type Preference struct {
 	Text string
 }
 
+const EmptyTitle string = ""
+
 type MovieMeta struct {
 	ID         uuid.UUID
 	PosterLink string

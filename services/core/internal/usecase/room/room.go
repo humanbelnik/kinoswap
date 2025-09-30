@@ -11,44 +11,47 @@ import (
 )
 
 var (
-	ErrCreate                 = errors.New("failed to create new room")
+	ErrCreateRoom             = errors.New("failed to create new room")
 	ErrParticipate            = errors.New("failed to participate")
 	ErrEnterRoom              = errors.New("failed to enter room")
 	ErrBuildEmbedding         = errors.New("failed to create embedding")
 	ErrFailedToStoreEmbedding = errors.New("failed to store embedding")
+	ErrReleaseRoom            = errors.New("failed to release room")
+	ErrAddToCache             = errors.New("failed to add roomID to a cache")
 )
 
-type Repository interface {
+type RoomRepository interface {
 	CreateAndAquire(ctx context.Context, roomID model.RoomID) error
 	FindAndAcquire(ctx context.Context) (model.RoomID, error)
 	TryAcquire(ctx context.Context, roomID model.RoomID) error
 	IsExistsRoomID(ctx context.Context, roomID model.RoomID) (bool, error)
 	IsRoomAcquired(ctx context.Context, roomID model.RoomID) (bool, error)
-	Participate(ctx context.Context, roomID model.RoomID, preference model.Preference) error
+	AppendPreference(ctx context.Context, roomID model.RoomID, preference model.Preference) error
+	ReleaseRoom(ctx context.Context, roomID model.RoomID) error
 }
 
-type IDCacheSet interface {
+type EmptyRoomsIDSet interface {
 	Remove(ctx context.Context) (model.RoomID, error)
 	Add(ctx context.Context, roomID model.RoomID) error
 }
 
 type Embedder interface {
-	BuildPreferenceEmbedding(ctx context.Context, P model.Preference) (model.Embedding, error)
+	BuildPreferenceEmbedding(ctx context.Context, p model.Preference) (model.Embedding, error)
 }
 
-type EmbeddingStorage interface {
-	Append(ctx context.Context, roomID model.RoomID, E model.Embedding) error
+type EmbeddingRepository interface {
+	Append(ctx context.Context, roomID model.RoomID, e model.Embedding) error
 }
 
 type Usecase struct {
-	repo       Repository
-	idCahceSet IDCacheSet
+	repo       RoomRepository
+	idCahceSet EmptyRoomsIDSet
 
 	embedder         Embedder
-	embeddingStorage EmbeddingStorage
+	embeddingStorage EmbeddingRepository
 }
 
-func New(repo Repository, embedder Embedder, embeddingStorage EmbeddingStorage, idCacheSet IDCacheSet) *Usecase {
+func New(repo RoomRepository, embedder Embedder, embeddingStorage EmbeddingRepository, idCacheSet EmptyRoomsIDSet) *Usecase {
 	return &Usecase{
 		repo:             repo,
 		embedder:         embedder,
@@ -76,16 +79,28 @@ func (u *Usecase) AcquireRoom(ctx context.Context) (model.RoomID, error) {
 	if err != nil {
 		return model.EmptyRoomID, err
 	}
-	return roomID, u.repo.CreateAndAquire(ctx, roomID)
+
+	err = u.repo.CreateAndAquire(ctx, roomID)
+	if err != nil {
+		err = fmt.Errorf("%w : %w", ErrCreateRoom, err)
+	}
+	return roomID, err
 }
 
 func (u *Usecase) ReleaseRoom(ctx context.Context, roomID model.RoomID) error {
+	if err := u.repo.ReleaseRoom(ctx, roomID); err != nil {
+		return fmt.Errorf("%w : %w", ErrReleaseRoom, err)
+	}
 
+	// Not critical
+	if err := u.idCahceSet.Add(ctx, roomID); err != nil {
+		return fmt.Errorf("%w : %w", ErrAddToCache, err)
+	}
 	return nil
 }
 
 func (u *Usecase) Participate(ctx context.Context, roomID model.RoomID, p model.Preference) error {
-	if err := u.repo.Participate(ctx, roomID, p); err != nil {
+	if err := u.repo.AppendPreference(ctx, roomID, p); err != nil {
 		return fmt.Errorf("%w:%w", ErrParticipate, err)
 	}
 
