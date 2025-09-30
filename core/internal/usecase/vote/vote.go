@@ -11,7 +11,6 @@ import (
 var (
 	ErrUnableToSaveVotes  = errors.New("unable to vote")
 	ErrUnableToGetResults = errors.New("unable to get results")
-	ErrNoCommon           = errors.New("no common films")
 )
 
 type VoteRepository interface {
@@ -44,8 +43,6 @@ func (u *Usecase) Results(ctx context.Context, roomID model.RoomID) ([]*model.Mo
 	if err != nil {
 		return nil, fmt.Errorf("%w:%w", ErrUnableToGetResults, err)
 	}
-	if len(results) == 0 {
-		return nil, ErrNoCommon
-	}
+
 	return results, nil
 }

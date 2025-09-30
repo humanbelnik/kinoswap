@@ -7,7 +7,6 @@ import (
 	"math/rand"
 	"strings"
 
-	"github.com/google/uuid"
 	"github.com/humanbelnik/kinoswap/core/internal/model"
 )
 
@@ -35,27 +34,27 @@ type IDCacheSet interface {
 }
 
 type Embedder interface {
-	EmbedPreference(ctx context.Context, ID uuid.UUID, P model.Preference) error
+	BuildPreferenceEmbedding(ctx context.Context, P model.Preference) (model.Embedding, error)
 }
 
-type EmbeddingStorer interface {
-	Store(ctx context.Context, roomID uuid.UUID, e model.Embedding) error
+type EmbeddingStorage interface {
+	Store(ctx context.Context, roomID model.RoomID, E model.Embedding) error
 }
 
 type Usecase struct {
 	repo       Repository
 	idCahceSet IDCacheSet
 
-	embedder        Embedder
-	embeddingStorer EmbeddingStorer
+	embedder         Embedder
+	embeddingStorage EmbeddingStorage
 }
 
-func New(repo Repository, embedder Embedder, embeddingStorer EmbeddingStorer, idCacheSet IDCacheSet) *Usecase {
+func New(repo Repository, embedder Embedder, embeddingStorage EmbeddingStorage, idCacheSet IDCacheSet) *Usecase {
 	return &Usecase{
-		repo:            repo,
-		embedder:        embedder,
-		embeddingStorer: embeddingStorer,
-		idCahceSet:      idCacheSet,
+		repo:             repo,
+		embedder:         embedder,
+		embeddingStorage: embeddingStorage,
+		idCahceSet:       idCacheSet,
 	}
 }
 
@@ -91,7 +90,22 @@ func (u *Usecase) Participate(ctx context.Context, roomID model.RoomID, p model.
 		return fmt.Errorf("%w:%w", ErrParticipate, err)
 	}
 
-	u.embedder.EmbedPreference(ctx, roomID.BuildUUID(), p)
+	go func() {
+		/*
+			Don't use parent HTTP context on async tasks.
+			Parent context cancels when response is made.
+		*/
+		ctx := context.Background()
+		e, err := u.embedder.BuildPreferenceEmbedding(ctx, p)
+		if err != nil {
+			//! Logging here
+			return
+		}
+		if err := u.embeddingStorage.Store(ctx, roomID, e); err != nil {
+			//! Logging here
+			return
+		}
+	}()
 
 	return nil
 }

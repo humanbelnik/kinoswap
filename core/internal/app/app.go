@@ -14,7 +14,6 @@ import (
 	infra_postgres_meta "github.com/humanbelnik/kinoswap/core/internal/infra/postgres/movie"
 	infra_postgres_room "github.com/humanbelnik/kinoswap/core/internal/infra/postgres/room"
 	infra_postgres_vote "github.com/humanbelnik/kinoswap/core/internal/infra/postgres/vote"
-	infra_qdrant_mock "github.com/humanbelnik/kinoswap/core/internal/infra/qdrant"
 	infra_redis_init "github.com/humanbelnik/kinoswap/core/internal/infra/redis/init"
 	infra_redis_roomid_set "github.com/humanbelnik/kinoswap/core/internal/infra/redis/roomid_set"
 	usecase_movie "github.com/humanbelnik/kinoswap/core/internal/usecase/movie"
@@ -37,7 +36,6 @@ func Go(cfg *config.Config) {
 	movieRepo := infra_postgres_meta.New(pgConn)
 
 	embedder := infra_embedder_mock.New()
-	embedderRepo := infra_qdrant_mock.New()
 
 	roomUC := usecase_room.New(roomRepo, embedder, embedderRepo, roomIDSet)
 	voteUC := usecase_vote.New(voteRepo)

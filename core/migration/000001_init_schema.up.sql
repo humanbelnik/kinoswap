@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS movies (
     title TEXT,
     year INT,
     rating NUMERIC,
-    genres TEXT[] DEFAULT '{}',
+    genres TEXT[] DEFAULT '{}', 
     overview TEXT,
     poster_link TEXT,
     movie_vector VECTOR(384)
