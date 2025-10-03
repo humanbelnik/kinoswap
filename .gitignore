@@ -10,7 +10,7 @@
 
 # Test binary, built with `go test -c`
 *.test
-
+*allure*
 # Code coverage profiles and other test artifacts
 *.out
 coverage.*
@@ -23,10 +23,14 @@ profile.cov
 # Go workspace file
 go.work
 go.work.sum
-
+tt/
 # env file
 .env
 
 # Editor/IDE
 # .idea/
 # .vscode/
+
+redis_data
+
+__pycache__/

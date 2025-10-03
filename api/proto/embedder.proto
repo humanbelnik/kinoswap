@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package embedding;
+
+option go_package = "gen/proto";
+
+service EmbeddingService {
+  rpc CreateMovieEmbedding(MovieEmbeddingRequest) returns (EmbeddingResponse) {}
+  rpc CreatePreferenceEmbedding(PreferenceEmbeddingRequest) returns (EmbeddingResponse) {}
+}
+
+message MovieEmbeddingRequest {
+  string title = 1;
+  repeated string genres = 2;
+  string overview = 3;
+  int32 year = 4;
+  float rating = 5;
+}
+
+message PreferenceEmbeddingRequest {
+  string text = 1;
+}
+
+message EmbeddingResponse {
+  repeated float embedding = 1;
+}
