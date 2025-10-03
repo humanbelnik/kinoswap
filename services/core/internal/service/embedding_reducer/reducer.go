@@ -4,6 +4,8 @@ import "github.com/humanbelnik/kinoswap/core/internal/model"
 
 type EmbeddingReducer struct{}
 
+func New() *EmbeddingReducer { return &EmbeddingReducer{} }
+
 /*
 Make this function panic only in learning purposes
 */

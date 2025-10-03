@@ -6,7 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/humanbelnik/kinoswap/core/internal/model"
-	mocks "github.com/humanbelnik/kinoswap/core/mocks/repository"
+	mocks "github.com/humanbelnik/kinoswap/core/mocks/vote/repository"
 	"github.com/ozontech/allure-go/pkg/framework/provider"
 	"github.com/ozontech/allure-go/pkg/framework/suite"
 	"github.com/stretchr/testify/assert"
@@ -14,16 +14,23 @@ import (
 
 type UsecaseVoteUnitSuite struct {
 	suite.Suite
+}
 
+type resources struct {
 	mockRepo *mocks.VoteRepository
 	usecase  *Usecase
 	ctx      context.Context
 }
 
-/*
-'Object Mother' pattern example
-aka cooks specific objects.
-*/
+func initResources(t provider.T) *resources {
+	repo := mocks.NewVoteRepository(t)
+	return &resources{
+		mockRepo: repo,
+		usecase:  New(repo),
+		ctx:      context.Background(),
+	}
+}
+
 func validRoomID() model.RoomID {
 	return model.RoomID("123456")
 }
@@ -56,67 +63,98 @@ func validVoteResult() model.VoteResult {
 	}
 }
 
-func (s *UsecaseVoteUnitSuite) BeforeEach(t provider.T) {
-	s.mockRepo = mocks.NewVoteRepository(t)
-	s.usecase = New(s.mockRepo)
-	s.ctx = context.Background()
+func (suite *UsecaseVoteUnitSuite) TestVote(t provider.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name        string
+		setupMocks  func(r *resources, roomID model.RoomID, voteResult model.VoteResult)
+		expectError bool
+	}{
+		{
+			name: "Should save vote successfully",
+			setupMocks: func(r *resources, roomID model.RoomID, voteResult model.VoteResult) {
+				r.mockRepo.On("AddVote", r.ctx, roomID, voteResult).Return(nil).Once()
+			},
+			expectError: false,
+		},
+		{
+			name: "Should return error when repository fails",
+			setupMocks: func(r *resources, roomID model.RoomID, voteResult model.VoteResult) {
+				r.mockRepo.On("AddVote", r.ctx, roomID, voteResult).Return(ErrUnableToSaveVotes).Once()
+			},
+			expectError: true,
+		},
+	}
+
+	for _, tc := range testCases {
+
+		t.Run(tc.name, func(t provider.T) {
+			t.Parallel()
+			r := initResources(t)
+			roomID := validRoomID()
+			voteResult := validVoteResult()
+			tc.setupMocks(r, roomID, voteResult)
+
+			err := r.usecase.Vote(r.ctx, roomID, voteResult)
+
+			if tc.expectError {
+				assert.ErrorIs(t, err, ErrUnableToSaveVotes)
+			} else {
+				assert.NoError(t, err)
+			}
+			r.mockRepo.AssertExpectations(t)
+		})
+	}
 }
 
-func (s *UsecaseVoteUnitSuite) TestVote(t provider.T) {
-	t.Run("Should save vote successfully", func(t provider.T) {
-		roomID := validRoomID()
-		voteResult := validVoteResult()
+func (suite *UsecaseVoteUnitSuite) TestResults(t provider.T) {
+	t.Parallel()
 
-		s.mockRepo.On("AddVote", s.ctx, roomID, voteResult).
-			Return(nil).Once()
+	testCases := []struct {
+		name          string
+		setupMocks    func(r *resources, roomID model.RoomID, expectedMetas []*model.MovieMeta)
+		expectError   bool
+		expectedMetas []*model.MovieMeta
+	}{
+		{
+			name: "Should return results successfully",
+			setupMocks: func(r *resources, roomID model.RoomID, expectedMetas []*model.MovieMeta) {
+				r.mockRepo.On("LoadResults", r.ctx, roomID).Return(expectedMetas, nil).Once()
+			},
+			expectError:   false,
+			expectedMetas: validMovieMetas(5),
+		},
+		{
+			name: "Should return error when repository fails",
+			setupMocks: func(r *resources, roomID model.RoomID, expectedMetas []*model.MovieMeta) {
+				r.mockRepo.On("LoadResults", r.ctx, roomID).Return(nil, ErrUnableToGetResults).Once()
+			},
+			expectError:   true,
+			expectedMetas: nil,
+		},
+	}
 
-		err := s.usecase.Vote(s.ctx, roomID, voteResult)
+	for _, tc := range testCases {
 
-		assert.NoError(t, err)
-		s.mockRepo.AssertExpectations(t)
-	})
+		t.Run(tc.name, func(t provider.T) {
+			t.Parallel()
+			r := initResources(t)
+			roomID := validRoomID()
+			tc.setupMocks(r, roomID, tc.expectedMetas)
 
-	t.Run("Should return error when repository fails", func(t provider.T) {
-		roomID := validRoomID()
-		voteResult := validVoteResult()
-		repoError := ErrUnableToSaveVotes
+			mmsActual, err := r.usecase.Results(r.ctx, roomID)
 
-		s.mockRepo.On("AddVote", s.ctx, roomID, voteResult).
-			Return(repoError).Once()
-
-		err := s.usecase.Vote(s.ctx, roomID, voteResult)
-
-		assert.ErrorIs(t, err, ErrUnableToSaveVotes)
-		s.mockRepo.AssertExpectations(t)
-	})
-}
-
-func (s *UsecaseVoteUnitSuite) TestResults(t provider.T) {
-	t.Run("Should return results successfully", func(t provider.T) {
-		roomID := validRoomID()
-		mmsExpected := validMovieMetas(5)
-
-		s.mockRepo.On("LoadResults", s.ctx, roomID).Return(mmsExpected, nil).Once()
-
-		mmsActual, err := s.usecase.Results(s.ctx, roomID)
-
-		assert.NoError(t, err)
-		s.mockRepo.AssertExpectations(t)
-		assert.ElementsMatch(t, mmsExpected, mmsActual)
-	})
-
-	t.Run("Should return error when repository fails", func(t provider.T) {
-		roomID := validRoomID()
-		repoError := ErrUnableToGetResults
-
-		s.mockRepo.On("LoadResults", s.ctx, roomID).Return(nil, repoError).Once()
-
-		mms, err := s.usecase.Results(s.ctx, roomID)
-
-		assert.ErrorIs(t, err, ErrUnableToGetResults)
-		assert.Nil(t, mms)
-		s.mockRepo.AssertExpectations(t)
-	})
+			if tc.expectError {
+				assert.ErrorIs(t, err, ErrUnableToGetResults)
+				assert.Nil(t, mmsActual)
+			} else {
+				assert.NoError(t, err)
+				assert.ElementsMatch(t, tc.expectedMetas, mmsActual)
+			}
+			r.mockRepo.AssertExpectations(t)
+		})
+	}
 }
 
 func TestUnitSuite(t *testing.T) {

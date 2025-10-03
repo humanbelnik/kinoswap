@@ -3,12 +3,13 @@ package usecase_room
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 
 	"github.com/humanbelnik/kinoswap/core/internal/model"
-	cache_mocks "github.com/humanbelnik/kinoswap/core/mocks/cache"
-	embedder_mocks "github.com/humanbelnik/kinoswap/core/mocks/embedder"
-	repo_mocks "github.com/humanbelnik/kinoswap/core/mocks/repository"
+	cache_mocks "github.com/humanbelnik/kinoswap/core/mocks/room/cache"
+	embedder_mocks "github.com/humanbelnik/kinoswap/core/mocks/room/embedder"
+	repo_mocks "github.com/humanbelnik/kinoswap/core/mocks/room/repository"
 	"github.com/ozontech/allure-go/pkg/framework/provider"
 	"github.com/ozontech/allure-go/pkg/framework/suite"
 	"github.com/stretchr/testify/assert"
@@ -17,157 +18,274 @@ import (
 
 type UsecaseRoomUnitSuite struct {
 	suite.Suite
+}
 
-	usecase *Usecase
-
+type resources struct {
+	usecase       *Usecase
 	roomRepo      *repo_mocks.RoomRepository
 	embeddingRepo *repo_mocks.EmbeddingRepository
 	set           *cache_mocks.EmptyRoomsIDSet
 	embedder      *embedder_mocks.Embedder
-
-	ctx context.Context
+	ctx           context.Context
+	wg            sync.WaitGroup
 }
 
 func validRoomID() model.RoomID {
 	return model.RoomID("123456")
 }
 
-func (s *UsecaseRoomUnitSuite) BeforeEach(t provider.T) {
-	s.roomRepo = repo_mocks.NewRoomRepository(t)
-	s.embeddingRepo = repo_mocks.NewEmbeddingRepository(t)
-	s.set = cache_mocks.NewEmptyRoomsIDSet(t)
-	s.embedder = embedder_mocks.NewEmbedder(t)
-	s.usecase = New(s.roomRepo, s.embedder, s.embeddingRepo, s.set)
-	s.ctx = context.Background()
+func initResources(t provider.T) *resources {
+	roomRepo := repo_mocks.NewRoomRepository(t)
+	embeddingRepo := repo_mocks.NewEmbeddingRepository(t)
+	set := cache_mocks.NewEmptyRoomsIDSet(t)
+	embedder := embedder_mocks.NewEmbedder(t)
+	usecase := New(roomRepo, embedder, embeddingRepo, set)
+
+	return &resources{
+		roomRepo:      roomRepo,
+		embeddingRepo: embeddingRepo,
+		set:           set,
+		embedder:      embedder,
+		usecase:       usecase,
+		ctx:           context.Background(),
+	}
 }
 
-func (s *UsecaseRoomUnitSuite) TestIsRoomAcquired(t provider.T) {
-	t.Run("Should return true when repository returns true", func(t provider.T) {
-		roomID := validRoomID()
+func (suite *UsecaseRoomUnitSuite) TestIsRoomAcquired(t provider.T) {
+	t.Parallel()
 
-		s.roomRepo.On("IsRoomAcquired", s.ctx, roomID).Return(true, nil).Once()
+	testCases := []struct {
+		name        string
+		setupMocks  func(r *resources, roomID model.RoomID)
+		expected    bool
+		expectError bool
+		expectedErr error
+	}{
+		{
+			name: "Should return true when repository returns true",
+			setupMocks: func(r *resources, roomID model.RoomID) {
+				r.roomRepo.On("IsRoomAcquired", r.ctx, roomID).Return(true, nil).Once()
+			},
+			expected:    true,
+			expectError: false,
+		},
+		{
+			name: "Should return false when repository returns false",
+			setupMocks: func(r *resources, roomID model.RoomID) {
+				r.roomRepo.On("IsRoomAcquired", r.ctx, roomID).Return(false, nil).Once()
+			},
+			expected:    false,
+			expectError: false,
+		},
+		{
+			name: "Should return false and error when repository returns error",
+			setupMocks: func(r *resources, roomID model.RoomID) {
+				expectedError := errors.New("repository error")
+				r.roomRepo.On("IsRoomAcquired", r.ctx, roomID).Return(false, expectedError).Once()
+			},
+			expected:    false,
+			expectError: true,
+			expectedErr: errors.New("repository error"),
+		},
+	}
 
-		result, err := s.usecase.IsRoomAcquired(s.ctx, roomID)
+	for _, tc := range testCases {
 
-		assert.NoError(t, err)
-		assert.True(t, result)
-		s.roomRepo.AssertExpectations(t)
-	})
+		t.Run(tc.name, func(t provider.T) {
+			t.Parallel()
+			r := initResources(t)
+			roomID := validRoomID()
+			tc.setupMocks(r, roomID)
 
-	t.Run("Should return false when repository returns false", func(t provider.T) {
-		roomID := validRoomID()
+			result, err := r.usecase.IsRoomAcquired(r.ctx, roomID)
 
-		s.roomRepo.On("IsRoomAcquired", s.ctx, roomID).Return(false, nil).Once()
-
-		result, err := s.usecase.IsRoomAcquired(s.ctx, roomID)
-
-		assert.NoError(t, err)
-		assert.False(t, result)
-		s.roomRepo.AssertExpectations(t)
-	})
-
-	t.Run("Should return false and error when repository returns error", func(t provider.T) {
-		roomID := validRoomID()
-		expectedError := errors.New("repository error")
-
-		s.roomRepo.On("IsRoomAcquired", s.ctx, roomID).Return(false, expectedError).Once()
-
-		result, err := s.usecase.IsRoomAcquired(s.ctx, roomID)
-
-		assert.Error(t, err)
-		assert.Equal(t, expectedError, err)
-		assert.False(t, result)
-		s.roomRepo.AssertExpectations(t)
-	})
+			if tc.expectError {
+				assert.Error(t, err)
+				assert.Equal(t, tc.expectedErr, err)
+			} else {
+				assert.NoError(t, err)
+			}
+			assert.Equal(t, tc.expected, result)
+			r.roomRepo.AssertExpectations(t)
+		})
+	}
 }
 
-func (s *UsecaseRoomUnitSuite) TestParticipate(t provider.T) {
-	t.Run("Should participate successfully", func(t provider.T) {
-		roomID := validRoomID()
-		preference := model.Preference{Text: "test preference"}
+func (suite *UsecaseRoomUnitSuite) TestParticipate(t provider.T) {
+	t.Parallel()
 
-		s.roomRepo.On("AppendPreference", s.ctx, roomID, preference).Return(nil).Once()
-		s.embedder.On("BuildPreferenceEmbedding", mock.Anything, preference).Return(model.Embedding{}, nil)
-		s.embeddingRepo.On("Append", mock.Anything, roomID, mock.AnythingOfType("model.Embedding")).Return(nil)
+	testCases := []struct {
+		name          string
+		setupMocks    func(r *resources, roomID model.RoomID, preference model.Preference)
+		expectError   bool
+		errorType     error
+		errorContains string
+	}{
+		{
+			name: "Should participate successfully",
+			setupMocks: func(r *resources, roomID model.RoomID, preference model.Preference) {
+				r.roomRepo.On("AppendPreference", r.ctx, roomID, preference).Return(nil).Once()
 
-		err := s.usecase.Participate(s.ctx, roomID, preference)
+				r.wg.Add(2)
+				r.embedder.On("BuildPreferenceEmbedding", mock.Anything, preference).Return(model.Embedding{}, nil).Run(func(args mock.Arguments) {
+					r.wg.Done()
+				})
+				r.embeddingRepo.On("Append", mock.Anything, roomID, mock.AnythingOfType("model.Embedding")).Return(nil).Run(func(args mock.Arguments) {
+					r.wg.Done()
+				})
+			},
+			expectError: false,
+		},
+		{
+			name: "Should return ErrParticipate when repository fails",
+			setupMocks: func(r *resources, roomID model.RoomID, preference model.Preference) {
+				repoError := errors.New("repository error")
+				r.roomRepo.On("AppendPreference", r.ctx, roomID, preference).Return(repoError).Once()
+			},
+			expectError:   true,
+			errorType:     ErrParticipate,
+			errorContains: "repository error",
+		},
+	}
 
-		assert.NoError(t, err)
-		s.roomRepo.AssertExpectations(t)
-	})
+	for _, tc := range testCases {
 
-	t.Run("Should return ErrParticipate when repository fails", func(t provider.T) {
-		roomID := validRoomID()
-		preference := model.Preference{Text: "test preference"}
-		repoError := errors.New("repository error")
+		t.Run(tc.name, func(t provider.T) {
+			t.Parallel()
+			r := initResources(t)
+			roomID := validRoomID()
+			preference := model.Preference{Text: "test preference"}
+			tc.setupMocks(r, roomID, preference)
 
-		s.roomRepo.On("AppendPreference", s.ctx, roomID, preference).Return(repoError).Once()
+			err := r.usecase.Participate(r.ctx, roomID, preference)
+			r.wg.Wait()
 
-		err := s.usecase.Participate(s.ctx, roomID, preference)
-
-		assert.ErrorIs(t, err, ErrParticipate)
-		assert.ErrorContains(t, err, repoError.Error())
-		s.roomRepo.AssertExpectations(t)
-	})
+			if tc.expectError {
+				assert.ErrorIs(t, err, tc.errorType)
+				assert.ErrorContains(t, err, tc.errorContains)
+			} else {
+				assert.NoError(t, err)
+			}
+			r.roomRepo.AssertExpectations(t)
+			if !tc.expectError {
+				r.embedder.AssertExpectations(t)
+				r.embeddingRepo.AssertExpectations(t)
+			}
+		})
+	}
 }
-func (s *UsecaseRoomUnitSuite) TestAcquireRoom(t provider.T) {
-	t.Run("Should acquire room successfully from cache", func(t provider.T) {
-		roomID := validRoomID()
 
-		s.set.On("Remove", s.ctx).Return(roomID, nil).Once()
-		s.roomRepo.On("TryAcquire", s.ctx, roomID).Return(nil).Once()
+func (suite *UsecaseRoomUnitSuite) TestAcquireRoom(t provider.T) {
+	t.Parallel()
 
-		result, err := s.usecase.AcquireRoom(s.ctx)
+	testCases := []struct {
+		name           string
+		setupMocks     func(r *resources)
+		expectedRoomID model.RoomID
+		expectError    bool
+		errorType      error
+		errorContains  string
+	}{
+		{
+			name: "Should acquire room successfully from cache",
+			setupMocks: func(r *resources) {
+				roomID := validRoomID()
+				r.set.On("Remove", r.ctx).Return(roomID, nil).Once()
+				r.roomRepo.On("TryAcquire", r.ctx, roomID).Return(nil).Once()
+			},
+			expectedRoomID: validRoomID(),
+			expectError:    false,
+		},
+		{
+			name: "Should return ErrCreateRoom when all paths fail",
+			setupMocks: func(r *resources) {
+				createError := errors.New("create error")
+				r.set.On("Remove", r.ctx).Return(model.EmptyRoomID, nil).Once()
+				r.roomRepo.On("FindAndAcquire", r.ctx).Return(model.EmptyRoomID, nil).Once()
+				r.roomRepo.On("IsExistsRoomID", r.ctx, mock.AnythingOfType("model.RoomID")).Return(false, nil).Once()
+				r.roomRepo.On("CreateAndAquire", r.ctx, mock.AnythingOfType("model.RoomID")).Return(createError).Once()
+			},
+			expectedRoomID: model.EmptyRoomID,
+			expectError:    true,
+			errorType:      ErrCreateRoom,
+			errorContains:  "create error",
+		},
+	}
 
-		assert.NoError(t, err)
-		assert.Equal(t, roomID, result)
-		s.set.AssertExpectations(t)
-		s.roomRepo.AssertExpectations(t)
-	})
+	for _, tc := range testCases {
 
-	t.Run("Should return ErrCreateRoom when all paths fail", func(t provider.T) {
-		createError := errors.New("create error")
+		t.Run(tc.name, func(t provider.T) {
+			t.Parallel()
+			r := initResources(t)
+			tc.setupMocks(r)
 
-		s.set.On("Remove", s.ctx).Return(model.EmptyRoomID, nil).Once()
-		s.roomRepo.On("FindAndAcquire", s.ctx).Return(model.EmptyRoomID, nil).Once()
-		s.roomRepo.On("IsExistsRoomID", s.ctx, mock.AnythingOfType("model.RoomID")).Return(false, nil).Once()
-		s.roomRepo.On("CreateAndAquire", s.ctx, mock.AnythingOfType("model.RoomID")).Return(createError).Once()
+			result, err := r.usecase.AcquireRoom(r.ctx)
 
-		_, err := s.usecase.AcquireRoom(s.ctx)
-
-		assert.ErrorIs(t, err, ErrCreateRoom)
-		assert.ErrorContains(t, err, createError.Error())
-		s.set.AssertExpectations(t)
-		s.roomRepo.AssertExpectations(t)
-	})
+			if tc.expectError {
+				assert.ErrorIs(t, err, tc.errorType)
+				assert.ErrorContains(t, err, tc.errorContains)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tc.expectedRoomID, result)
+			}
+			r.set.AssertExpectations(t)
+			r.roomRepo.AssertExpectations(t)
+		})
+	}
 }
 
-func (s *UsecaseRoomUnitSuite) TestReleaseRoom(t provider.T) {
-	t.Run("Should release room successfully", func(t provider.T) {
-		roomID := validRoomID()
+func (suite *UsecaseRoomUnitSuite) TestReleaseRoom(t provider.T) {
+	t.Parallel()
 
-		s.roomRepo.On("ReleaseRoom", s.ctx, roomID).Return(nil).Once()
-		s.set.On("Add", s.ctx, roomID).Return(nil).Once()
+	testCases := []struct {
+		name          string
+		setupMocks    func(r *resources, roomID model.RoomID)
+		expectError   bool
+		errorType     error
+		errorContains string
+	}{
+		{
+			name: "Should release room successfully",
+			setupMocks: func(r *resources, roomID model.RoomID) {
+				r.roomRepo.On("ReleaseRoom", r.ctx, roomID).Return(nil).Once()
+				r.set.On("Add", r.ctx, roomID).Return(nil).Once()
+			},
+			expectError: false,
+		},
+		{
+			name: "Should return ErrReleaseRoom when repository fails",
+			setupMocks: func(r *resources, roomID model.RoomID) {
+				releaseError := errors.New("release error")
+				r.roomRepo.On("ReleaseRoom", r.ctx, roomID).Return(releaseError).Once()
+			},
+			expectError:   true,
+			errorType:     ErrReleaseRoom,
+			errorContains: "release error",
+		},
+	}
 
-		err := s.usecase.ReleaseRoom(s.ctx, roomID)
+	for _, tc := range testCases {
 
-		assert.NoError(t, err)
-		s.roomRepo.AssertExpectations(t)
-		s.set.AssertExpectations(t)
-	})
+		t.Run(tc.name, func(t provider.T) {
+			t.Parallel()
+			r := initResources(t)
+			roomID := validRoomID()
+			tc.setupMocks(r, roomID)
 
-	t.Run("Should return ErrReleaseRoom when repository fails", func(t provider.T) {
-		roomID := validRoomID()
-		releaseError := errors.New("release error")
+			err := r.usecase.ReleaseRoom(r.ctx, roomID)
 
-		s.roomRepo.On("ReleaseRoom", s.ctx, roomID).Return(releaseError).Once()
-
-		err := s.usecase.ReleaseRoom(s.ctx, roomID)
-
-		assert.ErrorIs(t, err, ErrReleaseRoom)
-		assert.ErrorContains(t, err, releaseError.Error())
-		s.roomRepo.AssertExpectations(t)
-	})
+			if tc.expectError {
+				assert.ErrorIs(t, err, tc.errorType)
+				assert.ErrorContains(t, err, tc.errorContains)
+			} else {
+				assert.NoError(t, err)
+			}
+			r.roomRepo.AssertExpectations(t)
+			if !tc.expectError {
+				r.set.AssertExpectations(t)
+			}
+		})
+	}
 }
 
 func TestUnitSuite(t *testing.T) {

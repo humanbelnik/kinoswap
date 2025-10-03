@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/humanbelnik/kinoswap/core/internal/model"
 	"github.com/jmoiron/sqlx"
+	"github.com/lib/pq"
 )
 
 type Driver struct {
@@ -66,14 +67,14 @@ func (d *Driver) LoadResults(ctx context.Context, roomID model.RoomID) ([]*model
 	)
 
 	type resultRow struct {
-		ID         string   `db:"id"`
-		Title      string   `db:"title"`
-		Year       int      `db:"year"`
-		Rating     float64  `db:"rating"`
-		Genres     []string `db:"genres"`
-		Overview   string   `db:"overview"`
-		PosterLink string   `db:"poster_link"`
-		PassCount  int      `db:"pass_count"`
+		ID         string         `db:"id"`
+		Title      string         `db:"title"`
+		Year       int            `db:"year"`
+		Rating     float64        `db:"rating"`
+		Genres     pq.StringArray `db:"genres"`
+		Overview   string         `db:"overview"`
+		PosterLink string         `db:"poster_link"`
+		PassCount  int            `db:"pass_count"`
 	}
 
 	var rows []resultRow

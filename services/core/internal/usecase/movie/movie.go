@@ -76,17 +76,18 @@ func (u *Usecase) KMostRelevantMovies(ctx context.Context, roomID model.RoomID, 
 		return nil, fmt.Errorf("%w:%w", ErrFailedToGetPreferences, err)
 	}
 
-	reducedPref, err := func() (model.Embedding, error) {
+	reducedPref, err := func() (pref model.Embedding, err error) {
 		defer func() {
 			if r := recover(); r != nil {
 				err = ErrFailedToReduce
 			}
 		}()
-		reducedPref := u.embeddingReducer.Reduce(prefs)
-		return reducedPref, err
+		pref = u.embeddingReducer.Reduce(prefs)
+		return pref, nil
 	}()
 
 	if err != nil {
+		fmt.Println("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", err)
 		return nil, err
 	}
 
@@ -128,15 +129,6 @@ func (u *Usecase) Upload(ctx context.Context, mm model.MovieMeta) error {
 	}()
 
 	return nil
-}
-
-func (u *Usecase) GetMovieByID(ctx context.Context, id uuid.UUID) (model.MovieMeta, error) {
-	meta, err := u.repository.LoadByID(ctx, id)
-	if err != nil {
-		return model.MovieMeta{}, fmt.Errorf("%w: %w", ErrFailedToLoadMeta, err)
-	}
-
-	return meta, nil
 }
 
 func (u *Usecase) DeleteMovie(ctx context.Context, id uuid.UUID) error {

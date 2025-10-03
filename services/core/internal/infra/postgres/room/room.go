@@ -98,14 +98,9 @@ func (d *Driver) AppendPreference(ctx context.Context, roomID model.RoomID, pref
 		`
 	)
 
-	res, err := d.db.ExecContext(ctx, q, preference.Text, string(roomID), RoomStatusAcquired)
+	_, err := d.db.ExecContext(ctx, q, preference.Text, string(roomID), RoomStatusAcquired)
 	if err != nil {
 		return err
-	}
-
-	rowsAffected, _ := res.RowsAffected()
-	if rowsAffected == 0 {
-		return fmt.Errorf("room %s not found or not in acquired status", roomID)
 	}
 
 	return nil
