@@ -24,7 +24,7 @@ test-allure:
 	mkdir -p $(ALLURE_RESULTS_DIR)
 	
 	
-	go test ./... -shuffle=on -p=1 -v
+	go test ./... -shuffle=on -v
 	
 	find . -name "allure-results" -type d | while read dir; do \
 		if [ "$$dir" != "./$(ALLURE_RESULTS_DIR)" ]; then \
