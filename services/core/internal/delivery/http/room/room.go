@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
+	http_common "github.com/humanbelnik/kinoswap/core/internal/delivery/http/common"
 	ws_room "github.com/humanbelnik/kinoswap/core/internal/delivery/ws/room"
 	"github.com/humanbelnik/kinoswap/core/internal/model"
 	usecase_room "github.com/humanbelnik/kinoswap/core/internal/usecase/room"
@@ -52,28 +53,46 @@ func (c *Controller) RegisterRoutes(router *gin.RouterGroup) {
 
 	room := router.Group("rooms/:room_id")
 	room.GET("/ws", c.roomWS)
-	room.GET("/acquired", c.isRoomAcquired)
-	room.POST("/participate", c.participate)
-	room.POST("/release", c.release)
+	room.GET("", c.isRoomAcquired)
+	room.POST("/participation", c.participate)
+	room.DELETE("", c.release)
 }
 
+// AcquireRoomResponseDTO
+type AcquireRoomResponseDTO struct {
+	RoomID string `json:"room_id" example:"123456"`
+}
+
+// @Summary Выделить комнату для голосования
+// @Description Выделяет команату для голосования и возвращет ее идентификатор
+// @Tags Rooms opertaions
+// @Accept json
+// @Produce json
+// @Success 200 {object} AcquireRoomResponseDTO "Комната успешно создана"
+// @Failure 500 {object} http_common.ErrorResponse "Внутренняя ошибка сервера"
+// @Router /rooms [get]
 func (c *Controller) acquireRoom(ctx *gin.Context) {
 	roomID, err := c.uc.AcquireRoom(ctx.Request.Context())
 	if err != nil {
 		c.logger.Error("failed to acquire room",
 			slog.String("error", err.Error()),
 		)
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		ctx.JSON(http.StatusInternalServerError, http_common.ErrorResponse{Message: "internal error"})
 		return
 	}
 
-	ctx.JSON(http.StatusOK, struct {
-		RoomID string `json:"room_id"`
-	}{
-		RoomID: string(roomID),
-	})
+	ctx.JSON(http.StatusOK, AcquireRoomResponseDTO{RoomID: string(roomID)})
 }
 
+// @Summary Проверяет доступ к комнате
+// @Description Проверяет доступ к комнате
+// @Tags Rooms opertaions
+// @Produce json
+// @Param room_id path string true "Идентификатор комнаты" example("123456")
+// @Success 200 "Комната существует"
+// @Failure 403 {objet} http_common.ErrorResponse "Комната закрыта"
+// @Failure 500 {object} http_common.ErrorResponse "Внутренняя ошибка сервера"
+// @Router /rooms/{room_id} [get]
 func (c *Controller) isRoomAcquired(ctx *gin.Context) {
 	roomID := ctx.Param("room_id")
 	ok, err := c.uc.IsRoomAcquired(ctx.Request.Context(), model.RoomID(roomID))
@@ -82,21 +101,33 @@ func (c *Controller) isRoomAcquired(ctx *gin.Context) {
 		return
 	}
 	if !ok {
-		ctx.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
+		ctx.JSON(http.StatusForbidden, gin.H{"error": "room not found"})
 		return
 	}
 
 	ctx.Status(http.StatusOK)
 }
 
-type RequestDTO struct {
+// ParticipateRequestDTO
+type ParticipateRequestDTO struct {
 	Text string `json:"text"`
 }
 
+// @Summary Участие в комнате
+// @Tags Rooms opertaions
+// @Description Позволяет пользователю присоединиться к голосованию с указнием пожеланий
+// @Accept json
+// @Produce json
+// @Param room_id path string true "Идентификатор комнаты" example("123456")
+// @Param request body ParticipateRequestDTO true "Предпочтения пользователя"
+// @Success 202 "Участник добавлен в пул голосующих"
+// @Failure 400 {object} http_common.ErrorResponse "Некорректный формат тела запроса"
+// @Failure 500 {object} http_common.ErrorResponse "Внутренняя ошибка сервера"
+// @Router /rooms/{room_id}/participation [post]
 func (c *Controller) participate(ctx *gin.Context) {
 	roomID := ctx.Param("room_id")
 
-	var req RequestDTO
+	var req ParticipateRequestDTO
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "incorrect request"})
 		return
@@ -109,9 +140,17 @@ func (c *Controller) participate(ctx *gin.Context) {
 		return
 	}
 
-	ctx.Status(http.StatusOK)
+	ctx.Status(http.StatusAccepted)
 }
 
+// @Summary Освобождение комнаты
+// @Description Освобождает ресурсы комнаты и делает её готовй для последующей резервации
+// @Tags Rooms opertaions
+// @Produce json
+// @Param room_id path string true "Идентификатор комнаты" example("123456")
+// @Success 200 "Комната успешно освобождена"
+// @Failure 500 {object} http_common.ErrorResponse "Внутренняя ошибка сервера"
+// @Router /rooms/{room_id} [delete]
 func (c *Controller) release(ctx *gin.Context) {
 	roomID := ctx.Param("room_id")
 	if err := c.uc.ReleaseRoom(ctx, model.RoomID(roomID)); err != nil {
