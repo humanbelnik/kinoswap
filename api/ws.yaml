@@ -1,0 +1,4 @@
+request:
+  get:
+    description: Добавить клиента в пул участников комнаты
+    path: ws://<host>:<port>/api/v1/rooms/{room_id}

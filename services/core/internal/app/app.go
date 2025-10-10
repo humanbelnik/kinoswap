@@ -6,6 +6,7 @@ import (
 	"github.com/humanbelnik/kinoswap/core/internal/config"
 	http_init "github.com/humanbelnik/kinoswap/core/internal/delivery/http/init"
 	http_room "github.com/humanbelnik/kinoswap/core/internal/delivery/http/room"
+	http_swagger "github.com/humanbelnik/kinoswap/core/internal/delivery/http/swagger"
 	http_voting "github.com/humanbelnik/kinoswap/core/internal/delivery/http/voting"
 	ws_room "github.com/humanbelnik/kinoswap/core/internal/delivery/ws/room"
 	infra_embedder "github.com/humanbelnik/kinoswap/core/internal/infra/embedder"
@@ -43,6 +44,7 @@ func Go(cfg *config.Config) {
 
 	controllerPool := http_init.NewControllerPool()
 
+	controllerPool.Add(http_swagger.New())
 	controllerPool.Add(http_room.New(roomUC, hub))
 	controllerPool.Add(http_voting.New(voteUC, hub))
 	//controllerPool.Add(http_movie.New(movieUC, hub))
