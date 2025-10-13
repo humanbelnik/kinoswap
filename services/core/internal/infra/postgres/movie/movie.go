@@ -148,18 +148,9 @@ func (r *Repository) Update(ctx context.Context, mm model.MovieMeta) error {
 func (r *Repository) DeleteByID(ctx context.Context, ID uuid.UUID) error {
 	query := `DELETE FROM movies WHERE id = $1`
 
-	result, err := r.db.ExecContext(ctx, query, ID)
+	_, err := r.db.ExecContext(ctx, query, ID)
 	if err != nil {
 		return fmt.Errorf("failed to delete movie: %w", err)
-	}
-
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("failed to get rows affected: %w", err)
-	}
-
-	if rowsAffected == 0 {
-		return ErrMovieNotFound
 	}
 
 	return nil

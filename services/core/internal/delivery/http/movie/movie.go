@@ -1,11 +1,14 @@
 package http_movie
 
 import (
+	"encoding/json"
+	"io"
 	"log/slog"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	http_common "github.com/humanbelnik/kinoswap/core/internal/delivery/http/common"
 	ws_room "github.com/humanbelnik/kinoswap/core/internal/delivery/ws/room"
 	"github.com/humanbelnik/kinoswap/core/internal/model"
 	usecase_movie "github.com/humanbelnik/kinoswap/core/internal/usecase/movie"
@@ -13,12 +16,12 @@ import (
 
 // CreateMovieRequestDTO представляет запрос на создание фильма
 type CreateMovieRequestDTO struct {
-	Title      string   `json:"title" binding:"required" example:"Интерстеллар"`
-	Year       int      `json:"year" binding:"required" example:"2014"`
-	Rating     float64  `json:"rating" binding:"required" example:"8.6"`
-	Genres     []string `json:"genres" binding:"required" example:"фантастика,драма,приключения"`
-	Overview   string   `json:"overview" binding:"required" example:"Захватывающая история о путешествии через червоточину..."`
-	PosterLink string   `json:"poster_link" binding:"required" example:"https://example.com/poster.jpg"`
+	Title    string   `json:"title" binding:"required" example:"Интерстеллар"`
+	Genres   []string `json:"genres" binding:"required" example:"фантастика,драма,приключения"`
+	Overview string   `json:"overview" binding:"required" example:"Захватывающая история о путешествии через червоточину..."`
+
+	Year   int     `json:"year" example:"2014"`
+	Rating float64 `json:"rating" example:"8.6"`
 }
 
 // UpdateMovieRequestDTO представляет запрос на обновление фильма
@@ -50,13 +53,12 @@ type MoviesListResponseDTO struct {
 
 func (r *CreateMovieRequestDTO) ConvertToMovieMeta() model.MovieMeta {
 	return model.MovieMeta{
-		ID:         uuid.New(),
-		Title:      r.Title,
-		Year:       r.Year,
-		Rating:     r.Rating,
-		Genres:     r.Genres,
-		Overview:   r.Overview,
-		PosterLink: r.PosterLink,
+		ID:       uuid.New(),
+		Title:    r.Title,
+		Year:     r.Year,
+		Rating:   r.Rating,
+		Genres:   r.Genres,
+		Overview: r.Overview,
 	}
 }
 
@@ -98,25 +100,25 @@ type ErrorResponse struct {
 	Code    int    `json:"code"`
 }
 
-type Controller struct {
-	uc  *usecase_movie.Usecase
+type Controller[T model.FileObject] struct {
+	uc  *usecase_movie.Usecase[T]
 	hub *ws_room.Hub
 
 	logger *slog.Logger
 }
 
-type ControllerOption func(*Controller)
+type ControllerOption[T model.FileObject] func(*Controller[T])
 
-func WithLogger(logger *slog.Logger) ControllerOption {
-	return func(c *Controller) {
+func WithLogger[T model.FileObject](logger *slog.Logger) ControllerOption[T] {
+	return func(c *Controller[T]) {
 		c.logger = logger
 	}
 }
 
-func New(uc *usecase_movie.Usecase,
+func New[T model.FileObject](uc *usecase_movie.Usecase[T],
 	hub *ws_room.Hub,
-	opts ...ControllerOption) *Controller {
-	c := &Controller{
+	opts ...ControllerOption[T]) *Controller[T] {
+	c := &Controller[T]{
 		uc:     uc,
 		hub:    hub,
 		logger: slog.Default(),
@@ -127,48 +129,84 @@ func New(uc *usecase_movie.Usecase,
 	return c
 }
 
-func (c *Controller) RegisterRoutes(router *gin.RouterGroup) {
+func (c *Controller[T]) RegisterRoutes(router *gin.RouterGroup) {
 	movies := router.Group("/movies")
 	movies.POST("", c.createMovie)
 	movies.GET("", c.getMovies)
 	movies.DELETE("/:movie_id", c.deleteMovie)
-	movies.PUT("/:movie_id", c.updateMovie)
 
-	movies.GET("rooms/:room_id/voting/movies", c.getMoviesForVoting)
+	// movies.GET("rooms/:room_id/voting/movies", c.getMoviesForVoting)
 }
 
 // @Summary Создание фильма
-// @Description Создает новый фильм в системе
+// @Description Создает новый фильм в системе. Принимает multipart/form-data с JSON данными о фильме и опциональным файлом постера
 // @Tags Movies operations
-// @Accept json
+// @Accept multipart/form-data
 // @Produce json
-// @Param request body CreateMovieRequestDTO true "Данные для создания фильма"
+// @Param body formData string true "Данные фильма в JSON формате" example({"title":"Inception","year":2010,"rating":8.8,"genres":["sci-fi","action"],"overview":"A thief who steals corporate secrets..."})
+// @Param file formData file false "Файл постера "
 // @Success 201 "Фильм успешно создан"
-// @Failure 400 {object} http_common.ErrorResponse "Некорректные данные запроса"
+// @Failure 400 {object} http_common.ErrorResponse "Некорректные данные запроса: невалидный JSON, отсутствует поле body"
 // @Failure 500 {object} http_common.ErrorResponse "Внутренняя ошибка сервера"
 // @Router /movies [post]
-func (c *Controller) createMovie(ctx *gin.Context) {
-	var req CreateMovieRequestDTO
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		c.logger.Warn("invalid request body", slog.String("error", err.Error()))
-		ctx.JSON(http.StatusBadRequest, ErrorResponse{
-			Error: "Invalid request body",
-			Code:  http.StatusBadRequest,
+func (c *Controller[T]) createMovie(ctx *gin.Context) {
+	form, err := ctx.MultipartForm()
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, http_common.ErrorResponse{
+			Message: "bad request",
 		})
 		return
 	}
 
-	movieMeta := req.ConvertToMovieMeta()
+	body := form.Value["body"]
+	if len(body) == 0 {
+		ctx.JSON(http.StatusBadRequest, http_common.ErrorResponse{
+			Message: "empty body",
+		})
+		return
+	}
 
-	if err := c.uc.Upload(ctx.Request.Context(), movieMeta); err != nil {
-		c.logger.Error("failed to create movie",
-			slog.String("error", err.Error()),
-			slog.String("title", req.Title),
-		)
-		ctx.JSON(http.StatusInternalServerError, ErrorResponse{
-			Error:   "Failed to create movie",
-			Message: err.Error(),
-			Code:    http.StatusInternalServerError,
+	var req CreateMovieRequestDTO
+	if err := json.Unmarshal([]byte(body[0]), &req); err != nil {
+		ctx.JSON(http.StatusBadRequest, http_common.ErrorResponse{
+			Message: "invalid body",
+		})
+		return
+	}
+
+	var posterData []byte
+	var posterFilename string
+	var poster *model.Poster
+
+	if files := form.File["file"]; len(files) > 0 {
+		fileHeader := files[0]
+		file, err := fileHeader.Open()
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, http_common.ErrorResponse{Message: "error on read file"})
+			return
+		}
+		defer file.Close()
+
+		posterFilename = fileHeader.Filename
+		posterData, err = io.ReadAll(file)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, http_common.ErrorResponse{Message: "error on read file"})
+			return
+		}
+		poster = &model.Poster{
+			Filename: posterFilename,
+			Content:  posterData,
+		}
+	}
+
+	movieMeta := req.ConvertToMovieMeta()
+	movie := model.Movie{
+		MM:     &movieMeta,
+		Poster: poster,
+	}
+	if err := c.uc.Upload(ctx.Request.Context(), movie); err != nil {
+		ctx.JSON(http.StatusInternalServerError, http_common.ErrorResponse{
+			Message: "Failed to create movie",
 		})
 		return
 	}
@@ -184,7 +222,7 @@ func (c *Controller) createMovie(ctx *gin.Context) {
 // @Success 200 {object} MoviesListResponseDTO "Список фильмов успешно получен"
 // @Failure 500 {object} http_common.ErrorResponse "Внутренняя ошибка сервера"
 // @Router /movies [get]
-func (c *Controller) getMovies(ctx *gin.Context) {
+func (c *Controller[T]) getMovies(ctx *gin.Context) {
 	movies, err := c.uc.Load(ctx.Request.Context())
 	if err != nil {
 		c.logger.Error("failed to load movies", slog.String("error", err.Error()))
@@ -215,7 +253,7 @@ func (c *Controller) getMovies(ctx *gin.Context) {
 // @Failure 404 {object} http_common.ErrorResponse "Фильм не найден"
 // @Failure 500 {object} http_common.ErrorResponse "Внутренняя ошибка сервера"
 // @Router /movies/{id} [delete]
-func (c *Controller) deleteMovie(ctx *gin.Context) {
+func (c *Controller[T]) deleteMovie(ctx *gin.Context) {
 	idParam := ctx.Param("movie_id")
 	movieID, err := uuid.Parse(idParam)
 	if err != nil {
@@ -236,15 +274,6 @@ func (c *Controller) deleteMovie(ctx *gin.Context) {
 			slog.String("movie_id", movieID.String()),
 		)
 
-		if err.Error() == usecase_movie.ErrFailedToLoadMeta.Error() {
-			ctx.JSON(http.StatusNotFound, ErrorResponse{
-				Error:   "Movie not found",
-				Message: err.Error(),
-				Code:    http.StatusNotFound,
-			})
-			return
-		}
-
 		ctx.JSON(http.StatusInternalServerError, ErrorResponse{
 			Error:   "Failed to delete movie",
 			Message: err.Error(),
@@ -256,71 +285,6 @@ func (c *Controller) deleteMovie(ctx *gin.Context) {
 	ctx.Status(http.StatusNoContent)
 }
 
-// @Summary Обновление фильма
-// @Description Обновляет данные фильма по идентификатору
-// @Tags Movies operations
-// @Accept json
-// @Produce json
-// @Param movie_id path string true "UUID фильма" example("550e8400-e29b-41d4-a716-446655440000")
-// @Param request body UpdateMovieRequestDTO true "Данные для обновления фильма"
-// @Success 200 "Фильм успешно обновлен"
-// @Failure 400 {object} http_common.ErrorResponse "Некорректные данные запроса"
-// @Failure 404 {object} http_common.ErrorResponse "Фильм не найден"
-// @Failure 500 {object} http_common.ErrorResponse "Внутренняя ошибка сервера"
-// @Router /movies/{id} [put]
-func (c *Controller) updateMovie(ctx *gin.Context) {
-	idParam := ctx.Param("movie_id")
-	movieID, err := uuid.Parse(idParam)
-	if err != nil {
-		c.logger.Warn("invalid movie ID",
-			slog.String("id", idParam),
-			slog.String("error", err.Error()),
-		)
-		ctx.JSON(http.StatusBadRequest, ErrorResponse{
-			Error: "Invalid movie ID",
-			Code:  http.StatusBadRequest,
-		})
-		return
-	}
-
-	var req UpdateMovieRequestDTO
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		c.logger.Warn("invalid request body", slog.String("error", err.Error()))
-		ctx.JSON(http.StatusBadRequest, ErrorResponse{
-			Error: "Invalid request body",
-			Code:  http.StatusBadRequest,
-		})
-		return
-	}
-
-	movieMeta := req.ConvertToMovieMeta(movieID)
-
-	if err := c.uc.UpdateMovie(ctx.Request.Context(), movieMeta); err != nil {
-		c.logger.Error("failed to update movie",
-			slog.String("error", err.Error()),
-			slog.String("movie_id", movieID.String()),
-		)
-
-		if err.Error() == usecase_movie.ErrFailedToLoadMeta.Error() {
-			ctx.JSON(http.StatusNotFound, ErrorResponse{
-				Error:   "Movie not found",
-				Message: err.Error(),
-				Code:    http.StatusNotFound,
-			})
-			return
-		}
-
-		ctx.JSON(http.StatusInternalServerError, ErrorResponse{
-			Error:   "Failed to update movie",
-			Message: err.Error(),
-			Code:    http.StatusInternalServerError,
-		})
-		return
-	}
-
-	ctx.Status(http.StatusOK)
-}
-
 // @Summary Получение фильмов для голосования
 // @Description Возвращает список фильмов доступных для голосования в комнате
 // @Tags Movies operations
@@ -330,6 +294,6 @@ func (c *Controller) updateMovie(ctx *gin.Context) {
 // @Failure 404 {object} http_common.ErrorResponse "Комната не найдена"
 // @Failure 500 {object} http_common.ErrorResponse "Внутренняя ошибка сервера"
 // @Router /rooms/{room_id}/voting/movies [get]
-func (c *Controller) getMoviesForVoting(ctx *gin.Context) {
+// func (c *Controller) getMoviesForVoting(ctx *gin.Context) {
 
-}
+// }

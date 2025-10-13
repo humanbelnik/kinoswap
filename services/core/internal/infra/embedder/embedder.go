@@ -39,3 +39,17 @@ func (e *Embedder) BuildPreferenceEmbedding(ctx context.Context, P model.Prefere
 	resp, err := e.client.CreatePreferenceEmbedding(ctx, req)
 	return model.Embedding(resp.GetEmbedding()), err
 }
+
+func (e *Embedder) BuildMovieEmbedding(ctx context.Context, mm model.MovieMeta) (model.Embedding, error) {
+	req := &proto.MovieEmbeddingRequest{
+		Title:    mm.Title,
+		Overview: mm.Overview,
+		Year:     int32(mm.Year),
+		Rating:   float32(mm.Rating),
+		Genres:   mm.Genres,
+	}
+
+	resp, err := e.client.CreateMovieEmbedding(ctx, req)
+	return model.Embedding(resp.GetEmbedding()), err
+
+}
