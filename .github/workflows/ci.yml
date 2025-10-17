@@ -37,7 +37,7 @@ jobs:
       - name: Run Unit Tests
         run: |
           cd services/core
-          docker-compose up unit-tests --build --exit-code-from unit-tests
+          docker compose up unit-tests --build --exit-code-from unit-tests
 
       - name: Upload Unit Test Results
         if: always()
