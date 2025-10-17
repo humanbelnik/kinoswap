@@ -53,7 +53,7 @@ services:
       dev_db:
         condition: service_healthy
     env_file:
-      - .env
+      - .env.test
     environment:
       DB_HOST: dev_db
       DB_PORT: 5432
