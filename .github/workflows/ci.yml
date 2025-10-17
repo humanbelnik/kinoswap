@@ -34,6 +34,11 @@ jobs:
           DB_SSLMODE=${{ vars.DB_SSLMODE }}
           EOF
 
+      - name: Create mocks
+        run: |
+          cd services/core
+          make mock-usecase-deps
+
       - name: Run Unit Tests
         run: |
           cd services/core
