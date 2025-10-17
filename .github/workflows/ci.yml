@@ -1,0 +1,50 @@
+name: CI
+on:
+  push:
+    branches:
+      - "feature/**"
+      - "develop"
+      - "main"
+  pull_request:
+    branches:
+      - "develop"
+      - "main"
+
+jobs:
+  unit-tests:
+    name: Run Unit Tests - Core Service
+    runs-on: ubuntu-latest
+    environment: Test
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Docker Compose
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y docker-compose-plugin
+
+      - name: Create .env.test file
+        run: |
+          cat > services/core/.env.test << EOF
+          DB_HOST=${{ vars.DB_HOST }}
+          DB_PORT=${{ vars.DB_PORT }}
+          DB_USER=${{ vars.DB_USER }}
+          DB_PASSWORD=${{ vars.DB_PASSWORD }}
+          DB_NAME=${{ vars.DB_NAME }}
+          DB_SSLMODE=${{ vars.DB_SSLMODE }}
+          EOF
+
+      - name: Run Unit Tests
+        run: |
+          cd services/core
+          docker-compose up unit-tests --build --exit-code-from unit-tests
+
+      - name: Upload Unit Test Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: core-unit-test-results
+          path: services/core/test-results/
+          retention-days: 7

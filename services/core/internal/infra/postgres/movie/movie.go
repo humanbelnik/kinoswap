@@ -119,6 +119,19 @@ func (r *Repository) LoadByIDs(ctx context.Context, IDs []uuid.UUID) ([]*model.M
 	return movies, nil
 }
 
+func (r *Repository) Exists(ctx context.Context, id uuid.UUID) (bool, error) {
+	var count int
+	err := r.db.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM movies WHERE id = $1", id,
+	).Scan(&count)
+
+	if err != nil {
+		return false, err
+	}
+
+	return count > 0, nil
+}
+
 func (r *Repository) Update(ctx context.Context, mm model.MovieMeta) error {
 	movieDB := FromDomain(mm)
 	query := `

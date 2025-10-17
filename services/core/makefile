@@ -14,7 +14,7 @@ mock-movie-usecase-deps:
 	mockery --dir ./internal/usecase/movie --name Embedder --output ./mocks/movie/embedder --filename embedder.go
 	mockery --dir ./internal/usecase/movie --name EmbeddingRepository --output ./mocks/movie/repository --filename embedding.go
 	mockery --dir ./internal/usecase/movie --name MovieRepository --output ./mocks/movie/repository --filename movie.go
-
+	mockery --dir ./internal/usecase/movie --name PosterStorage --output ./mocks/movie/s3 --filename s3.go
 
 ALLURE_RESULTS_DIR = allure-results
 ALLURE_REPORT_DIR = allure-report

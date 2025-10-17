@@ -24,6 +24,8 @@ var (
 	ErrFailedToBuildEmbedding = errors.New("failed to build embedding")
 	ErrFailedToStoreEmbedding = errors.New("failed to store embedding")
 	ErrFailedToPresignURLs    = errors.New("failed to presign urls")
+
+	ErrFailedToCheckExists = errors.New("failed to check exists")
 )
 
 type MovieRepository interface {
@@ -33,9 +35,10 @@ type MovieRepository interface {
 	Load(ctx context.Context) ([]*model.MovieMeta, error)
 	LoadByID(ctx context.Context, ID uuid.UUID) (model.MovieMeta, error)
 	LoadByIDs(ctx context.Context, IDs []uuid.UUID) ([]*model.MovieMeta, error)
-	Update(ctx context.Context, mm model.MovieMeta) error
 
-	UpdateEmbedding(ctx context.Context, ID uuid.UUID, e model.Embedding) error
+	Exists(ctx context.Context, id uuid.UUID) (bool, error)
+
+	Update(ctx context.Context, mm model.MovieMeta) error
 
 	KNN(ctx context.Context, k int, e model.Embedding) ([]*model.MovieMeta, error)
 }
@@ -120,10 +123,14 @@ func New[T model.FileObject](
 // }
 
 func (u *Usecase[T]) Upload(ctx context.Context, movie model.Movie) error {
-	ID := uuid.New()
-	movie.MM.ID = ID
-	strID := ID.String()
+	ID := movie.MM.ID
+	if ID == uuid.Nil {
+		ID = uuid.New()
+		movie.MM.ID = ID
 
+	}
+
+	strID := ID.String()
 	if err := u.metaRepository.Store(ctx, *movie.MM); err != nil {
 		return fmt.Errorf("%w: %w", ErrFailedToStoreMeta, err)
 	}
@@ -141,7 +148,6 @@ func (u *Usecase[T]) Upload(ctx context.Context, movie model.Movie) error {
 			return fmt.Errorf("%w:%w", ErrFailedToStorePoster, err)
 		}
 	}
-
 	emb, err := u.embedder.BuildMovieEmbedding(ctx, *movie.MM)
 	if err != nil {
 		_ = u.posterStorage.Delete(ctx, movie.MM.PosterLink)
@@ -150,6 +156,7 @@ func (u *Usecase[T]) Upload(ctx context.Context, movie model.Movie) error {
 	}
 
 	if err = u.embeddingRepository.Store(ctx, movie.MM.ID, emb); err != nil {
+		fmt.Println(err)
 		_ = u.posterStorage.Delete(ctx, movie.MM.PosterLink)
 		_ = u.metaRepository.DeleteByID(ctx, movie.MM.ID)
 		return fmt.Errorf("%w : %w", ErrFailedToStoreEmbedding, err)
@@ -161,8 +168,15 @@ func (u *Usecase[T]) Upload(ctx context.Context, movie model.Movie) error {
 func (u *Usecase[T]) DeleteMovie(ctx context.Context, id uuid.UUID) error {
 	_ = u.posterStorage.Delete(ctx, id.String())
 	_ = u.metaRepository.DeleteByID(ctx, id)
-
 	return nil
+}
+
+func (u *Usecase[T]) Exists(ctx context.Context, id uuid.UUID) (bool, error) {
+	exists, err := u.metaRepository.Exists(ctx, id)
+	if err != nil {
+		return false, fmt.Errorf("%w : %w", ErrFailedToCheckExists, err)
+	}
+	return exists, nil
 }
 
 func (u *Usecase[T]) UpdateMovie(ctx context.Context, mm model.MovieMeta) error {

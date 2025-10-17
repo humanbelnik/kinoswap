@@ -1,3 +1,5 @@
+//go:build unit
+
 package infra_postgres_room
 
 import (

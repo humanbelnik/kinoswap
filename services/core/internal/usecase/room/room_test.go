@@ -1,3 +1,5 @@
+//go:build unit
+
 package usecase_room
 
 import (
