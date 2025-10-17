@@ -9,7 +9,8 @@
 *.dylib
 *mocks/
 # Test binary, built with `go test -c`
-*.test
+.env.test
+
 *allure*
 # Code coverage profiles and other test artifacts
 *.out
