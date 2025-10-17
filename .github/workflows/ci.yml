@@ -12,7 +12,7 @@ on:
 
 jobs:
   unit-tests:
-    name: Run Unit Tests - Core Service
+    name: Core - Unit tests
     runs-on: ubuntu-latest
     environment: Test
 
@@ -58,5 +58,57 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: core-unit-test-results
+          path: services/core/test-results/
+          retention-days: 7
+
+  integration-tests:
+    name: Core - Integraton tests
+    runs-on: ubuntu-latest
+    environment: Test
+    needs: unit-tests
+    if: needs.unit-tests.result == 'success'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: "1.25"
+
+      - name: Install mockery
+        run: |
+          go install github.com/vektra/mockery/v2@latest
+
+      - name: Setup Docker
+        uses: docker/setup-buildx-action@v3
+
+      - name: Create .env.test file
+        run: |
+          cat > services/core/.env.test << EOF
+          DB_HOST=${{ vars.DB_HOST }}
+          DB_PORT=${{ vars.DB_PORT }}
+          DB_USER=${{ vars.DB_USER }}
+          DB_PASSWORD=${{ vars.DB_PASSWORD }}
+          DB_NAME=${{ vars.DB_NAME }}
+          DB_SSLMODE=${{ vars.DB_SSLMODE }}
+          EOF
+
+      - name: Create mocks
+        run: |
+          cd services/core
+          make mock-usecase-deps
+
+      - name: Run Integration Tests
+        run: |
+          cd services/core
+          docker compose up integration-tests --build --exit-code-from integration-tests
+
+      - name: Upload Integration Test Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: core-integration-test-results
           path: services/core/test-results/
           retention-days: 7
