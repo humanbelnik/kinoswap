@@ -1,6 +1,13 @@
 
 mock-usecase-deps: mock-vote-usecase-deps mock-room-usecase-deps mock-movie-usecase-deps
 
+usecase-mocks:
+	go generate ./...
+
+run-postgres:
+	docker-compose up --build migrate
+
+
 mock-vote-usecase-deps:
 	mockery --dir ./internal/usecase/vote --name VoteRepository --output ./mocks/vote/repository --filename vote.go
 
