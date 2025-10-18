@@ -51,17 +51,20 @@ type Usecase struct {
 	metaRepository   MetaRepository
 	posterRepository PosterRepository
 	embedder         Embedder
+	embeddingReducer EmbeddingReducer
 }
 
 func New(
 	metaRepository MetaRepository,
 	posterRepository PosterRepository,
 	embedder Embedder,
+	embeddingReducer EmbeddingReducer,
 ) *Usecase {
 	return &Usecase{
 		metaRepository:   metaRepository,
 		posterRepository: posterRepository,
 		embedder:         embedder,
+		embeddingReducer: embeddingReducer,
 	}
 }
 

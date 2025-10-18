@@ -12,6 +12,7 @@ import (
 	infra_pg_init "github.com/humanbelnik/kinoswap/core/internal/infra/postgres/init"
 	infra_postgres_movie "github.com/humanbelnik/kinoswap/core/internal/infra/postgres/movie"
 	infra_s3 "github.com/humanbelnik/kinoswap/core/internal/infra/s3"
+	"github.com/humanbelnik/kinoswap/core/internal/service/embedding_reducer"
 	usecase_movie "github.com/humanbelnik/kinoswap/core/internal/usecase/movie"
 )
 
@@ -30,7 +31,7 @@ func Go(cfg *config.Config) {
 		panic(err)
 	}
 
-	// embeddingReducer := embedding_reducer.New()
+	embeddingReducer := embedding_reducer.New()
 
 	// roomIDSet := infra_redis_roomid_set.New(redisConn, roomIDSetKey)
 
@@ -41,7 +42,7 @@ func Go(cfg *config.Config) {
 
 	// roomUC := usecase_room.New(roomRepo, embedderConn, embedderRepo, roomIDSet)
 	// voteUC := usecase_vote.New(voteRepo)
-	movieUC := usecase_movie.New(movieRepository, posterRepository, embedder)
+	movieUC := usecase_movie.New(movieRepository, posterRepository, embedder, embeddingReducer)
 
 	hub := ws_room.New(slog.Default())
 

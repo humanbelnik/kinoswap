@@ -1,5 +1,3 @@
-//go:build integration
-
 package usecase_movie
 
 import (
@@ -8,13 +6,12 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/humanbelnik/kinoswap/core/internal/config"
-	infra_postgres_embedding "github.com/humanbelnik/kinoswap/core/internal/infra/postgres/embedding"
 	infra_pg_init "github.com/humanbelnik/kinoswap/core/internal/infra/postgres/init"
 	infra_postgres_movie "github.com/humanbelnik/kinoswap/core/internal/infra/postgres/movie"
 	"github.com/humanbelnik/kinoswap/core/internal/model"
 	"github.com/humanbelnik/kinoswap/core/internal/service/embedding_reducer"
-	mocks_embedder "github.com/humanbelnik/kinoswap/core/mocks/movie/embedder"
-	mocks_s3 "github.com/humanbelnik/kinoswap/core/mocks/movie/s3"
+	mocks_embedder "github.com/humanbelnik/kinoswap/core/internal/usecase/movie/mocks/movie/embedder"
+	mocks_s3 "github.com/humanbelnik/kinoswap/core/internal/usecase/movie/mocks/movie/repository"
 
 	"github.com/ozontech/allure-go/pkg/framework/provider"
 	"github.com/ozontech/allure-go/pkg/framework/suite"
@@ -24,21 +21,20 @@ import (
 
 type UsecaseMovieIntegrationSuite struct {
 	suite.Suite
-	uc *Usecase[*model.Poster]
+	uc *Usecase
 }
 
-func initUsecase(t provider.T) *Usecase[*model.Poster] {
+func initUsecase(t provider.T) *Usecase {
 	cfg := config.Load()
 
 	pgConn := infra_pg_init.MustEstablishConn(cfg.Postgres)
-	posterStorage := mocks_s3.NewPosterStorage[*model.Poster](t)
+	posterRepository := mocks_s3.NewPosterRepository(t)
 
 	embeddingReducer := embedding_reducer.New()
-	movieRepo := infra_postgres_movie.New(pgConn)
-	embedderRepo := infra_postgres_embedding.New(pgConn)
-	embedderConn := mocks_embedder.NewEmbedder(t)
+	movieRepository := infra_postgres_movie.New(pgConn)
+	embedder := mocks_embedder.NewEmbedder(t)
 
-	return New(posterStorage, embedderConn, movieRepo, embedderRepo, embeddingReducer)
+	return New(movieRepository, posterRepository, embedder, embeddingReducer)
 }
 
 func (s *UsecaseMovieIntegrationSuite) BeforeAll(t provider.T) {
@@ -80,7 +76,7 @@ func (s *UsecaseMovieIntegrationSuite) TestIntegrationExists(t provider.T) {
 				s.uc.Upload(context.Background(), movie)
 			},
 			teardown: func(movieID uuid.UUID) {
-				s.uc.metaRepository.DeleteByID(ctx, movieID)
+				s.uc.metaRepository.Delete(ctx, movieID)
 			},
 
 			expectError: false,
@@ -138,7 +134,7 @@ func (s *UsecaseMovieIntegrationSuite) TestIntegrationUpload(t provider.T) {
 				}
 			},
 			teardown: func(movieID uuid.UUID) {
-				s.uc.metaRepository.DeleteByID(ctx, movieID)
+				s.uc.metaRepository.Delete(ctx, movieID)
 			},
 
 			expectError: false,
