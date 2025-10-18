@@ -7,26 +7,32 @@
 *.dll
 *.so
 *.dylib
-
+*mocks/
 # Test binary, built with `go test -c`
-*.test
+.env.test
 
+*allure*
 # Code coverage profiles and other test artifacts
 *.out
 coverage.*
 *.coverprofile
 profile.cov
 
+.aws/
 # Dependency directories (remove the comment below to include it)
 # vendor/
 
 # Go workspace file
 go.work
 go.work.sum
-
+tt/
 # env file
 .env
 
 # Editor/IDE
 # .idea/
 # .vscode/
+
+redis_data
+
+__pycache__/

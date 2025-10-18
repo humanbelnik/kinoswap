@@ -1,0 +1,88 @@
+services:
+  dev_db:
+    image: pgvector/pgvector:pg16
+    container_name: ${DB_NAME}
+    env_file:
+      - .env.test
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./migration:/migration
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+    networks:
+      - test-network
+
+
+  unit-tests:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+      target: test-runner
+    env_file:
+      - .env.test
+    networks:
+      - test-network
+    command: ["sh", "-c", "go test -v -tags='unit,!integration' ./..."]
+
+  integration-tests:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+      target: test-runner
+    env_file:
+      - .env.test
+    networks:
+      - test-network
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    command: ["sh", "-c", "go test -v -tags='integration,!unit' ./..."]
+
+  migrate:
+    image: migrate/migrate
+    depends_on:
+      dev_db:
+        condition: service_healthy
+    env_file:
+      - .env.test
+    environment:
+      DB_HOST: dev_db
+      DB_PORT: 5432
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+      DB_SSLMODE: disable
+    volumes:
+      - ./migration:/migration
+    command:
+      - "-path=/migration"
+      - "-database=postgres://${DB_USER}:${DB_PASSWORD}@dev_db:5432/${DB_NAME}?sslmode=disable"
+      - "up"
+    networks:
+      - test-network
+
+
+  redis:
+    image: redis:7.2-alpine
+    container_name: redis-kinoswap
+    env_file:
+      - .env
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT}:6379"
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}"]
+    volumes:
+      - ./redis_data:/data
+
+networks:
+  test-network:
+    driver: bridge

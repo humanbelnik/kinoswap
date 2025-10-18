@@ -1,0 +1,514 @@
+basePath: /api/v1/
+definitions:
+  http_common.ErrorResponse:
+    properties:
+      message:
+        example: something bad happened...
+        type: string
+    type: object
+  http_movie.CreateMovieRequestDTO:
+    properties:
+      genres:
+        example:
+        - фантастика
+        - драма
+        - приключения
+        items:
+          type: string
+        type: array
+      overview:
+        example: Захватывающая история о путешествии через червоточину...
+        type: string
+      poster_link:
+        example: https://example.com/poster.jpg
+        type: string
+      rating:
+        example: 8.6
+        type: number
+      title:
+        example: Интерстеллар
+        type: string
+      year:
+        example: 2014
+        type: integer
+    required:
+    - genres
+    - overview
+    - poster_link
+    - rating
+    - title
+    - year
+    type: object
+  http_movie.MovieResponseDTO:
+    properties:
+      genres:
+        example:
+        - фантастика
+        - драма
+        - приключения
+        items:
+          type: string
+        type: array
+      id:
+        example: 550e8400-e29b-41d4-a716-446655440000
+        type: string
+      overview:
+        example: Захватывающая история о путешествии через червоточину...
+        type: string
+      poster_link:
+        example: https://example.com/poster.jpg
+        type: string
+      rating:
+        example: 8.6
+        type: number
+      title:
+        example: Интерстеллар
+        type: string
+      year:
+        example: 2014
+        type: integer
+    type: object
+  http_movie.MoviesListResponseDTO:
+    properties:
+      movies:
+        items:
+          $ref: '#/definitions/http_movie.MovieResponseDTO'
+        type: array
+      total:
+        type: integer
+    type: object
+  http_movie.UpdateMovieRequestDTO:
+    properties:
+      genres:
+        example:
+        - фантастика
+        - драма
+        - приключения
+        items:
+          type: string
+        type: array
+      overview:
+        example: Обновленное описание фильма...
+        type: string
+      poster_link:
+        example: https://example.com/new-poster.jpg
+        type: string
+      rating:
+        example: 8.7
+        type: number
+      title:
+        example: Интерстеллар (обновленное)
+        type: string
+      year:
+        example: 2014
+        type: integer
+    type: object
+  http_room.AcquireRoomResponseDTO:
+    properties:
+      room_id:
+        example: "123456"
+        type: string
+    type: object
+  http_room.ParticipateRequestDTO:
+    properties:
+      text:
+        type: string
+    type: object
+  http_voting.MovieResultDTO:
+    properties:
+      genres:
+        example:
+        - фантастика
+        - драма
+        - приключения
+        items:
+          type: string
+        type: array
+      id:
+        example: 550e8400-e29b-41d4-a716-446655440000
+        type: string
+      likes_count:
+        example: 5
+        type: integer
+      overview:
+        example: Захватывающая история...
+        type: string
+      poster_link:
+        example: https://example.com/poster.jpg
+        type: string
+      rating:
+        example: 8.6
+        type: number
+      title:
+        example: Интерстеллар
+        type: string
+      year:
+        example: 2014
+        type: integer
+    type: object
+  http_voting.MovieVoteDTO:
+    properties:
+      liked:
+        example: true
+        type: boolean
+      movie_id:
+        example: 550e8400-e29b-41d4-a716-446655440000
+        type: string
+    type: object
+  http_voting.VoteRequestDTO:
+    properties:
+      votes:
+        items:
+          $ref: '#/definitions/http_voting.MovieVoteDTO'
+        type: array
+    type: object
+  http_voting.VotingStatusRequestDTO:
+    properties:
+      status:
+        enum:
+        - start
+        - restart
+        - finish
+        example: active
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact: {}
+  title: Kinoswap API
+  version: "1.0"
+paths:
+  /movies:
+    get:
+      description: Возвращает список всех фильмов в системе
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Список фильмов успешно получен
+          schema:
+            $ref: '#/definitions/http_movie.MoviesListResponseDTO'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/http_common.ErrorResponse'
+      summary: Получение списка фильмов
+      tags:
+      - Movies operations
+    post:
+      consumes:
+      - application/json
+      description: Создает новый фильм в системе
+      parameters:
+      - description: Данные для создания фильма
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/http_movie.CreateMovieRequestDTO'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Фильм успешно создан
+        "400":
+          description: Некорректные данные запроса
+          schema:
+            $ref: '#/definitions/http_common.ErrorResponse'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/http_common.ErrorResponse'
+      summary: Создание фильма
+      tags:
+      - Movies operations
+  /movies/{id}:
+    delete:
+      description: Удаляет фильм по идентификатору
+      parameters:
+      - description: UUID фильма
+        example: '"550e8400-e29b-41d4-a716-446655440000"'
+        in: path
+        name: movie_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: Фильм успешно удален
+        "400":
+          description: Некорректный UUID фильма
+          schema:
+            $ref: '#/definitions/http_common.ErrorResponse'
+        "404":
+          description: Фильм не найден
+          schema:
+            $ref: '#/definitions/http_common.ErrorResponse'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/http_common.ErrorResponse'
+      summary: Удаление фильма
+      tags:
+      - Movies operations
+    put:
+      consumes:
+      - application/json
+      description: Обновляет данные фильма по идентификатору
+      parameters:
+      - description: UUID фильма
+        example: '"550e8400-e29b-41d4-a716-446655440000"'
+        in: path
+        name: movie_id
+        required: true
+        type: string
+      - description: Данные для обновления фильма
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/http_movie.UpdateMovieRequestDTO'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Фильм успешно обновлен
+        "400":
+          description: Некорректные данные запроса
+          schema:
+            $ref: '#/definitions/http_common.ErrorResponse'
+        "404":
+          description: Фильм не найден
+          schema:
+            $ref: '#/definitions/http_common.ErrorResponse'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/http_common.ErrorResponse'
+      summary: Обновление фильма
+      tags:
+      - Movies operations
+  /rooms:
+    get:
+      consumes:
+      - application/json
+      description: Выделяет команату для голосования и возвращет ее идентификатор
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Комната успешно создана
+          schema:
+            $ref: '#/definitions/http_room.AcquireRoomResponseDTO'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/http_common.ErrorResponse'
+      summary: Выделить комнату для голосования
+      tags:
+      - Rooms opertaions
+  /rooms/{room_id}:
+    delete:
+      description: Освобождает ресурсы комнаты и делает её готовй для последующей
+        резервации
+      parameters:
+      - description: Идентификатор комнаты
+        example: '"123456"'
+        in: path
+        name: room_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Комната успешно освобождена
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/http_common.ErrorResponse'
+      summary: Освобождение комнаты
+      tags:
+      - Rooms opertaions
+    get:
+      description: Проверяет доступ к комнате
+      parameters:
+      - description: Идентификатор комнаты
+        example: '"123456"'
+        in: path
+        name: room_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Комната существует
+        "403":
+          description: Комната закрыта
+          schema:
+            type: objet
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/http_common.ErrorResponse'
+      summary: Проверяет доступ к комнате
+      tags:
+      - Rooms opertaions
+  /rooms/{room_id}/participation:
+    post:
+      consumes:
+      - application/json
+      description: Позволяет пользователю присоединиться к голосованию с указнием
+        пожеланий
+      parameters:
+      - description: Идентификатор комнаты
+        example: '"123456"'
+        in: path
+        name: room_id
+        required: true
+        type: string
+      - description: Предпочтения пользователя
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/http_room.ParticipateRequestDTO'
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Участник добавлен в пул голосующих
+        "400":
+          description: Некорректный формат тела запроса
+          schema:
+            $ref: '#/definitions/http_common.ErrorResponse'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/http_common.ErrorResponse'
+      summary: Участие в комнате
+      tags:
+      - Rooms opertaions
+  /rooms/{room_id}/voting/movies:
+    get:
+      description: Возвращает список фильмов доступных для голосования в комнате
+      parameters:
+      - description: Идентификатор комнаты
+        example: '"550e8400-e29b-41d4-a716-446655440000"'
+        in: path
+        name: room_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Список фильмов для голосования
+          schema:
+            $ref: '#/definitions/http_movie.MoviesListResponseDTO'
+        "404":
+          description: Комната не найдена
+          schema:
+            $ref: '#/definitions/http_common.ErrorResponse'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/http_common.ErrorResponse'
+      summary: Получение фильмов для голосования
+      tags:
+      - Movies operations
+  /rooms/{room_id}/voting/results:
+    get:
+      description: Возвращает массив фильмов с количеством лайков для текущей или
+        завершенной сессии голосования
+      parameters:
+      - description: Идентификатор комнаты
+        example: '"123456"'
+        in: path
+        name: room_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Результаты голосования
+          schema:
+            items:
+              $ref: '#/definitions/http_voting.MovieResultDTO'
+            type: array
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/http_common.ErrorResponse'
+      summary: Получить результаты голосования
+      tags:
+      - Voting operations
+  /rooms/{room_id}/voting/status:
+    patch:
+      consumes:
+      - application/json
+      description: Изменяет статус сессии голосования
+      parameters:
+      - description: Идентификатор комнаты
+        example: '"123456"'
+        in: path
+        name: room_id
+        required: true
+        type: string
+      - description: Новый статус голосования
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/http_voting.VotingStatusRequestDTO'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Статус успешно обновлен
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/http_common.ErrorResponse'
+      summary: Изменить статус голосования
+      tags:
+      - Voting operations
+  /rooms/{room_id}/voting/votes:
+    post:
+      consumes:
+      - application/json
+      description: Принимает массив голосов (movie_id, liked) и регистрирует их для
+        текущей сессии голосования
+      parameters:
+      - description: Идентификатор комнаты
+        example: '"123456"'
+        in: path
+        name: room_id
+        required: true
+        type: string
+      - description: Массив голосов за фильмы
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/http_voting.VoteRequestDTO'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Голоса успешно приняты
+        "400":
+          description: Некорректный запрос
+          schema:
+            $ref: '#/definitions/http_common.ErrorResponse'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/http_common.ErrorResponse'
+      summary: Отправить результаты голосования
+      tags:
+      - Voting operations
+swagger: "2.0"
