@@ -2,7 +2,9 @@ package http_init
 
 import (
 	"log"
+	"time"
 
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 )
 
@@ -20,7 +22,16 @@ type ControllerPool struct {
 
 func NewControllerPool() *ControllerPool {
 	engine := gin.Default() // ! Change on NGINX setup
+	engine.Use(cors.New(cors.Config{
+		AllowOrigins:     []string{"*"}, // Внимание: не работает с AllowCredentials
+		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "X-user-token", "Authorization"},
+		ExposeHeaders:    []string{"Content-Length", "X-user-token"},
+		AllowCredentials: false, // Должно быть false при AllowOrigins: ["*"]
+		MaxAge:           12 * time.Hour,
+	}))
 	rg := engine.Group(apiPrefix)
+
 	return &ControllerPool{
 		pool:   make([]Controller, 0, 10),
 		rg:     rg,

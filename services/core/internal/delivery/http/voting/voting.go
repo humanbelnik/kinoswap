@@ -1,122 +1,122 @@
 package http_voting
 
-import (
-	"log/slog"
+// import (
+// 	"log/slog"
 
-	"github.com/gin-gonic/gin"
-	ws_room "github.com/humanbelnik/kinoswap/core/internal/delivery/ws/room"
-	usecase_vote "github.com/humanbelnik/kinoswap/core/internal/usecase/vote"
-)
+// 	"github.com/gin-gonic/gin"
+// 	ws_room "github.com/humanbelnik/kinoswap/core/internal/delivery/ws/room"
+// 	usecase_vote "github.com/humanbelnik/kinoswap/core/internal/usecase/vote"
+// )
 
-type Controller struct {
-	uc  *usecase_vote.Usecase
-	hub *ws_room.Hub
+// type Controller struct {
+// 	uc  *usecase_vote.Usecase
+// 	hub *ws_room.Hub
 
-	logger *slog.Logger
-}
+// 	logger *slog.Logger
+// }
 
-type ControllerOption func(*Controller)
+// type ControllerOption func(*Controller)
 
-func WithLogger(logger *slog.Logger) ControllerOption {
-	return func(c *Controller) {
-		c.logger = logger
-	}
-}
+// func WithLogger(logger *slog.Logger) ControllerOption {
+// 	return func(c *Controller) {
+// 		c.logger = logger
+// 	}
+// }
 
-func New(uc *usecase_vote.Usecase,
-	hub *ws_room.Hub,
-	opts ...ControllerOption) *Controller {
-	c := &Controller{
-		uc:     uc,
-		hub:    hub,
-		logger: slog.Default(),
-	}
-	for _, opt := range opts {
-		opt(c)
-	}
-	return c
-}
+// func New(uc *usecase_vote.Usecase,
+// 	hub *ws_room.Hub,
+// 	opts ...ControllerOption) *Controller {
+// 	c := &Controller{
+// 		uc:     uc,
+// 		hub:    hub,
+// 		logger: slog.Default(),
+// 	}
+// 	for _, opt := range opts {
+// 		opt(c)
+// 	}
+// 	return c
+// }
 
-func (c *Controller) RegisterRoutes(router *gin.RouterGroup) {
-	voting := router.Group("rooms/:room_id/voting")
-	voting.POST("/votes", c.vote)
-	voting.PATCH("/status", c.changeStatus)
-	voting.GET("/results", c.votingResults)
-}
+// func (c *Controller) RegisterRoutes(router *gin.RouterGroup) {
+// 	voting := router.Group("rooms/:room_id/voting")
+// 	voting.POST("/votes", c.vote)
+// 	voting.PATCH("/status", c.changeStatus)
+// 	voting.GET("/results", c.votingResults)
+// }
 
-// VoteRequestDTO
-type VoteRequestDTO struct {
-	Votes []MovieVoteDTO `json:"votes"`
-}
+// // VoteRequestDTO
+// type VoteRequestDTO struct {
+// 	Votes []MovieVoteDTO `json:"votes"`
+// }
 
-// MovieVoteDTO
-type MovieVoteDTO struct {
-	MovieID string `json:"movie_id" example:"550e8400-e29b-41d4-a716-446655440000"`
-	Liked   bool   `json:"liked" example:"true"`
-}
+// // MovieVoteDTO
+// type MovieVoteDTO struct {
+// 	MovieID string `json:"movie_id" example:"550e8400-e29b-41d4-a716-446655440000"`
+// 	Liked   bool   `json:"liked" example:"true"`
+// }
 
-// VotingStatusRequestDTO
-type VotingStatusRequestDTO struct {
-	Status string `json:"status" example:"active" enums:"start,restart,finish"`
-}
+// // VotingStatusRequestDTO
+// type VotingStatusRequestDTO struct {
+// 	Status string `json:"status" example:"active" enums:"start,restart,finish"`
+// }
 
-// MovieResultDTO
-type MovieResultDTO struct {
-	MovieMetaDTO
-	LikesCount int `json:"likes_count" example:"5"`
-}
+// // MovieResultDTO
+// type MovieResultDTO struct {
+// 	MovieMetaDTO
+// 	LikesCount int `json:"likes_count" example:"5"`
+// }
 
-// MovieMetaDTO
-type MovieMetaDTO struct {
-	ID         string   `json:"id" example:"550e8400-e29b-41d4-a716-446655440000" swaggertype:"string"`
-	PosterLink string   `json:"poster_link" example:"https://example.com/poster.jpg"`
-	Title      string   `json:"title" example:"Интерстеллар"`
-	Genres     []string `json:"genres" example:"фантастика,драма,приключения"`
-	Year       int      `json:"year" example:"2014"`
-	Rating     float64  `json:"rating" example:"8.6"`
-	Overview   string   `json:"overview" example:"Захватывающая история..."`
-}
+// // MovieMetaDTO
+// type MovieMetaDTO struct {
+// 	ID         string   `json:"id" example:"550e8400-e29b-41d4-a716-446655440000" swaggertype:"string"`
+// 	PosterLink string   `json:"poster_link" example:"https://example.com/poster.jpg"`
+// 	Title      string   `json:"title" example:"Интерстеллар"`
+// 	Genres     []string `json:"genres" example:"фантастика,драма,приключения"`
+// 	Year       int      `json:"year" example:"2014"`
+// 	Rating     float64  `json:"rating" example:"8.6"`
+// 	Overview   string   `json:"overview" example:"Захватывающая история..."`
+// }
 
-// @Summary Отправить результаты голосования
-// @Description Принимает массив голосов (movie_id, liked) и регистрирует их для текущей сессии голосования
-// @Tags Voting operations
-// @Accept json
-// @Produce json
-// @Param room_id path string true "Идентификатор комнаты" example("123456")
-// @Param request body VoteRequestDTO true "Массив голосов за фильмы"
-// @Success 200 "Голоса успешно приняты"
-// @Failure 400 {object} http_common.ErrorResponse "Некорректный запрос"
-// @Failure 500 {object} http_common.ErrorResponse "Внутренняя ошибка сервера"
-// @Router /rooms/{room_id}/voting/votes [post]
-func (c *Controller) vote(ctx *gin.Context) {
-	panic("unimplamented")
-}
+// // @Summary Отправить результаты голосования
+// // @Description Принимает массив голосов (movie_id, liked) и регистрирует их для текущей сессии голосования
+// // @Tags Voting operations
+// // @Accept json
+// // @Produce json
+// // @Param room_id path string true "Идентификатор комнаты" example("123456")
+// // @Param request body VoteRequestDTO true "Массив голосов за фильмы"
+// // @Success 200 "Голоса успешно приняты"
+// // @Failure 400 {object} http_common.ErrorResponse "Некорректный запрос"
+// // @Failure 500 {object} http_common.ErrorResponse "Внутренняя ошибка сервера"
+// // @Router /rooms/{room_id}/voting/votes [post]
+// func (c *Controller) vote(ctx *gin.Context) {
+// 	panic("unimplamented")
+// }
 
-// @Summary Изменить статус голосования
-// @Description Изменяет статус сессии голосования
-// @Tags Voting operations
-// @Accept json
-// @Produce json
-// @Param room_id path string true "Идентификатор комнаты" example("123456")
-// @Param request body VotingStatusRequestDTO true "Новый статус голосования"
-// @Success 200 "Статус успешно обновлен"
-// @Failure 500 {object} http_common.ErrorResponse "Внутренняя ошибка сервера"
-// @Router /rooms/{room_id}/voting/status [patch]
-func (c *Controller) changeStatus(ctx *gin.Context) {
-	panic("unimplamented")
-}
+// // @Summary Изменить статус голосования
+// // @Description Изменяет статус сессии голосования
+// // @Tags Voting operations
+// // @Accept json
+// // @Produce json
+// // @Param room_id path string true "Идентификатор комнаты" example("123456")
+// // @Param request body VotingStatusRequestDTO true "Новый статус голосования"
+// // @Success 200 "Статус успешно обновлен"
+// // @Failure 500 {object} http_common.ErrorResponse "Внутренняя ошибка сервера"
+// // @Router /rooms/{room_id}/voting/status [patch]
+// func (c *Controller) changeStatus(ctx *gin.Context) {
+// 	panic("unimplamented")
+// }
 
-// @Summary Получить результаты голосования
-// @Description Возвращает массив фильмов с количеством лайков для текущей или завершенной сессии голосования
-// @Tags Voting operations
-// @Produce json
-// @Param room_id path string true "Идентификатор комнаты" example("123456")
-// @Success 200 {array} MovieResultDTO "Результаты голосования"
-// @Failure 500 {object} http_common.ErrorResponse "Внутренняя ошибка сервера"
-// @Router /rooms/{room_id}/voting/results [get]
-func (c *Controller) votingResults(ctx *gin.Context) {
-	panic("unimplenmented")
-}
+// // @Summary Получить результаты голосования
+// // @Description Возвращает массив фильмов с количеством лайков для текущей или завершенной сессии голосования
+// // @Tags Voting operations
+// // @Produce json
+// // @Param room_id path string true "Идентификатор комнаты" example("123456")
+// // @Success 200 {array} MovieResultDTO "Результаты голосования"
+// // @Failure 500 {object} http_common.ErrorResponse "Внутренняя ошибка сервера"
+// // @Router /rooms/{room_id}/voting/results [get]
+// func (c *Controller) votingResults(ctx *gin.Context) {
+// 	panic("unimplenmented")
+// }
 
 // // @Summary Start voting session
 // // @Description Start a new voting session in the room

@@ -3,7 +3,6 @@ package usecase_movie
 import (
 	"context"
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -48,10 +47,10 @@ type PosterRepository interface {
 }
 
 type Usecase struct {
-	metaRepository   MetaRepository
-	posterRepository PosterRepository
-	embedder         Embedder
-	embeddingReducer EmbeddingReducer
+	MetaRepository   MetaRepository
+	PosterRepository PosterRepository
+	Embedder         Embedder
+	EmbeddingReducer EmbeddingReducer
 }
 
 func New(
@@ -61,10 +60,10 @@ func New(
 	embeddingReducer EmbeddingReducer,
 ) *Usecase {
 	return &Usecase{
-		metaRepository:   metaRepository,
-		posterRepository: posterRepository,
-		embedder:         embedder,
-		embeddingReducer: embeddingReducer,
+		MetaRepository:   metaRepository,
+		PosterRepository: posterRepository,
+		Embedder:         embedder,
+		EmbeddingReducer: embeddingReducer,
 	}
 }
 
@@ -100,15 +99,14 @@ func NewMovieBuilder(u *Usecase, movie model.Movie) *MovieBuilder {
 func (b *MovieBuilder) WithMeta(ctx context.Context) *MovieBuilder {
 	op := Op{
 		exec: func(ctx context.Context) error {
-			err := b.uc.metaRepository.Store(ctx, *b.movie.MM)
+			err := b.uc.MetaRepository.Store(ctx, *b.movie.MM)
 			if err != nil {
 				return errors.Join(ErrInternal, err)
 			}
 			return nil
 		},
 		rollback: func(ctx context.Context) error {
-			fmt.Println("FUCKKKK")
-			return b.uc.metaRepository.Delete(ctx, b.movie.MM.ID)
+			return b.uc.MetaRepository.Delete(ctx, b.movie.MM.ID)
 		},
 	}
 	b.ops = append(b.ops, op)
@@ -125,7 +123,7 @@ func (b *MovieBuilder) WithPoster(ctx context.Context) *MovieBuilder {
 
 	op := Op{
 		exec: func(ctx context.Context) error {
-			_, err := b.uc.posterRepository.Save(ctx, &model.Poster{
+			_, err := b.uc.PosterRepository.Save(ctx, &model.Poster{
 				Filename: strID,
 				Content:  b.movie.Poster.Content,
 				MovieID:  b.movie.Poster.MovieID,
@@ -136,7 +134,7 @@ func (b *MovieBuilder) WithPoster(ctx context.Context) *MovieBuilder {
 			return nil
 		},
 		rollback: func(ctx context.Context) error {
-			return b.uc.posterRepository.Delete(ctx, b.movie.MM.PosterLink)
+			return b.uc.PosterRepository.Delete(ctx, b.movie.MM.PosterLink)
 		},
 	}
 	b.ops = append(b.ops, op)
@@ -146,14 +144,14 @@ func (b *MovieBuilder) WithPoster(ctx context.Context) *MovieBuilder {
 func (b *MovieBuilder) WithEmbedding(ctx context.Context) *MovieBuilder {
 	op := Op{
 		exec: func(ctx context.Context) error {
-			emb, err := b.uc.embedder.BuildMovieEmbedding(ctx, *b.movie.MM)
+			emb, err := b.uc.Embedder.BuildMovieEmbedding(ctx, *b.movie.MM)
 			if err != nil {
 				return errors.Join(ErrInternal, err)
 			}
 			if len(emb) != model.EmbeddingDimension {
 				return ErrInvalidEmbeddingDimension
 			}
-			err = b.uc.metaRepository.StoreEmbedding(ctx, b.movie.MM.ID, emb)
+			err = b.uc.MetaRepository.StoreEmbedding(ctx, b.movie.MM.ID, emb)
 			if err != nil {
 				return errors.Join(ErrInternal, err)
 			}
@@ -208,11 +206,11 @@ func (u *Usecase) Delete(ctx context.Context, id uuid.UUID) error {
 		return ErrResourceNotFound
 	}
 
-	if err := u.metaRepository.Delete(ctx, id); err != nil {
+	if err := u.MetaRepository.Delete(ctx, id); err != nil {
 		return errors.Join(ErrInternal, err)
 	}
 
-	if err := u.posterRepository.Delete(ctx, id.String()); err != nil {
+	if err := u.PosterRepository.Delete(ctx, id.String()); err != nil {
 		return errors.Join(ErrInternal, err)
 	}
 
@@ -220,7 +218,7 @@ func (u *Usecase) Delete(ctx context.Context, id uuid.UUID) error {
 }
 
 func (u *Usecase) Exists(ctx context.Context, id uuid.UUID) (bool, error) {
-	exists, err := u.metaRepository.Exists(ctx, id)
+	exists, err := u.MetaRepository.Exists(ctx, id)
 	if err != nil {
 		return false, errors.Join(ErrInternal, err)
 	}
@@ -229,7 +227,7 @@ func (u *Usecase) Exists(ctx context.Context, id uuid.UUID) (bool, error) {
 
 // Giving presigned URLs to access files from S3 directly from the client
 func (u *Usecase) LoadAll(ctx context.Context) ([]*model.MovieMeta, error) {
-	mm, err := u.metaRepository.LoadAll(ctx)
+	mm, err := u.MetaRepository.LoadAll(ctx)
 	if err != nil {
 		return nil, errors.Join(ErrInternal, err)
 	}
@@ -240,7 +238,7 @@ func (u *Usecase) LoadAll(ctx context.Context) ([]*model.MovieMeta, error) {
 
 	for _, m := range mm {
 		if m.PosterLink != "" {
-			m.PosterLink, err = u.posterRepository.GeneratePresignedURL(ctx, m.PosterLink, 10*time.Minute)
+			m.PosterLink, err = u.PosterRepository.GeneratePresignedURL(ctx, m.PosterLink, 10*time.Minute)
 			if err != nil {
 				return nil, errors.Join(ErrInternal, err)
 			}
@@ -251,7 +249,7 @@ func (u *Usecase) LoadAll(ctx context.Context) ([]*model.MovieMeta, error) {
 }
 
 func (u *Usecase) LoadSome(ctx context.Context, ids []uuid.UUID) ([]*model.MovieMeta, error) {
-	mm, err := u.metaRepository.LoadSome(ctx, ids)
+	mm, err := u.MetaRepository.LoadSome(ctx, ids)
 	if err != nil {
 		return nil, errors.Join(ErrInternal, err)
 	}
@@ -262,7 +260,7 @@ func (u *Usecase) LoadSome(ctx context.Context, ids []uuid.UUID) ([]*model.Movie
 
 	for _, m := range mm {
 		if m.PosterLink != "" {
-			m.PosterLink, err = u.posterRepository.GeneratePresignedURL(ctx, m.PosterLink, 10*time.Minute)
+			m.PosterLink, err = u.PosterRepository.GeneratePresignedURL(ctx, m.PosterLink, 10*time.Minute)
 			if err != nil {
 				return nil, errors.Join(ErrInternal, err)
 			}

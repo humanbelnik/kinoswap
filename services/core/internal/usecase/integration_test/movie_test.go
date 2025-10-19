@@ -1,15 +1,17 @@
-package usecase_movie
+//go:build integration
+
+package integrationtest
 
 import (
 	"context"
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/humanbelnik/kinoswap/core/internal/config"
 	infra_pg_init "github.com/humanbelnik/kinoswap/core/internal/infra/postgres/init"
 	infra_postgres_movie "github.com/humanbelnik/kinoswap/core/internal/infra/postgres/movie"
 	"github.com/humanbelnik/kinoswap/core/internal/model"
 	"github.com/humanbelnik/kinoswap/core/internal/service/embedding_reducer"
+	movie_usecase "github.com/humanbelnik/kinoswap/core/internal/usecase/movie"
 	mocks_embedder "github.com/humanbelnik/kinoswap/core/internal/usecase/movie/mocks/movie/embedder"
 	mocks_s3 "github.com/humanbelnik/kinoswap/core/internal/usecase/movie/mocks/movie/repository"
 
@@ -21,11 +23,11 @@ import (
 
 type UsecaseMovieIntegrationSuite struct {
 	suite.Suite
-	uc *Usecase
+	uc *movie_usecase.Usecase
 }
 
-func initUsecase(t provider.T) *Usecase {
-	cfg := config.Load()
+func initUsecase(t provider.T) *movie_usecase.Usecase {
+	cfg := getConfig()
 
 	pgConn := infra_pg_init.MustEstablishConn(cfg.Postgres)
 	posterRepository := mocks_s3.NewPosterRepository(t)
@@ -34,7 +36,7 @@ func initUsecase(t provider.T) *Usecase {
 	movieRepository := infra_postgres_movie.New(pgConn)
 	embedder := mocks_embedder.NewEmbedder(t)
 
-	return New(movieRepository, posterRepository, embedder, embeddingReducer)
+	return movie_usecase.New(movieRepository, posterRepository, embedder, embeddingReducer)
 }
 
 func (s *UsecaseMovieIntegrationSuite) BeforeAll(t provider.T) {
@@ -60,7 +62,7 @@ func (s *UsecaseMovieIntegrationSuite) TestIntegrationExists(t provider.T) {
 				embedderConn := mocks_embedder.NewEmbedder(t)
 				embedderConn.On("BuildMovieEmbedding", mock.Anything, mock.Anything).
 					Return(model.Embedding(make([]float32, 384)), nil)
-				s.uc.embedder = embedderConn
+				s.uc.Embedder = embedderConn
 				movie := model.Movie{
 					MM: &model.MovieMeta{
 						ID:         movieID,
@@ -76,7 +78,7 @@ func (s *UsecaseMovieIntegrationSuite) TestIntegrationExists(t provider.T) {
 				s.uc.Upload(context.Background(), movie)
 			},
 			teardown: func(movieID uuid.UUID) {
-				s.uc.metaRepository.Delete(ctx, movieID)
+				s.uc.MetaRepository.Delete(ctx, movieID)
 			},
 
 			expectError: false,
@@ -119,7 +121,7 @@ func (s *UsecaseMovieIntegrationSuite) TestIntegrationUpload(t provider.T) {
 				embedderConn := mocks_embedder.NewEmbedder(t)
 				embedderConn.On("BuildMovieEmbedding", mock.Anything, mock.Anything).
 					Return(model.Embedding(make([]float32, 384)), nil)
-				s.uc.embedder = embedderConn
+				s.uc.Embedder = embedderConn
 				return model.Movie{
 					MM: &model.MovieMeta{
 						ID:         movieID,
@@ -134,7 +136,7 @@ func (s *UsecaseMovieIntegrationSuite) TestIntegrationUpload(t provider.T) {
 				}
 			},
 			teardown: func(movieID uuid.UUID) {
-				s.uc.metaRepository.Delete(ctx, movieID)
+				s.uc.MetaRepository.Delete(ctx, movieID)
 			},
 
 			expectError: false,

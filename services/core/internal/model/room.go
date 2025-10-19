@@ -2,10 +2,15 @@ package model
 
 import "github.com/google/uuid"
 
-type RoomID string
+type RoomStatus = string
 
-const EmptyRoomID RoomID = ""
+const (
+	StatusLobby  RoomStatus = "LOBBY"
+	StatusVoting RoomStatus = "VOTING"
+)
 
-func (id RoomID) BuildUUID() uuid.UUID {
-	return uuid.NewSHA1(uuid.NameSpaceURL, []byte(id))
+type Room struct {
+	ID         uuid.UUID
+	PublicCode string
+	Status     string
 }

@@ -1,4 +1,4 @@
-//go:build unit
+////go:build unit
 
 package usecase_movie
 
@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/humanbelnik/kinoswap/core/internal/model"
+	"github.com/humanbelnik/kinoswap/core/internal/service/embedding_reducer"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
@@ -69,7 +70,8 @@ func initResources(t provider.T) *resources {
 	metaRepository := repo_mocks.NewMetaRepository(t)
 	posterRepository := repo_mocks.NewPosterRepository(t)
 	embedder := embedder_mocks.NewEmbedder(t)
-	usecase := New(metaRepository, posterRepository, embedder)
+	embeddingReducer := embedding_reducer.New()
+	usecase := New(metaRepository, posterRepository, embedder, embeddingReducer)
 
 	return &resources{
 		usecase:          usecase,

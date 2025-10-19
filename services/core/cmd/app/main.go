@@ -15,6 +15,10 @@ import (
 // @in header
 // @name X-admin-token
 
+// @securityDefinitions.apikey UserToken
+// @in header
+// @name X-user-token
+
 func main() {
 	app.Go(config.Load())
 }
