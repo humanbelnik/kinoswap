@@ -28,15 +28,15 @@ func MustEstabilishConn() *s3.Client {
 	return s3.NewFromConfig(cfg)
 }
 
-type S3Storage[T model.FileObject] struct {
+type S3Storage struct {
 	client *s3.Client
 
 	prefix     string
 	bucketName string
 }
 
-func New[T model.FileObject](bucketName string, client *s3.Client, prefix string) (*S3Storage[T], error) {
-	storage := S3Storage[T]{
+func New(bucketName string, client *s3.Client, prefix string) (*S3Storage, error) {
+	storage := S3Storage{
 		bucketName: bucketName,
 		client:     client,
 		prefix:     prefix,
@@ -64,7 +64,7 @@ func New[T model.FileObject](bucketName string, client *s3.Client, prefix string
 	return &storage, err
 }
 
-func (s *S3Storage[T]) buildKey(paths ...string) string {
+func (s *S3Storage) buildKey(paths ...string) string {
 	var cleaned []string
 	for _, p := range paths {
 		clean := strings.ReplaceAll(p, "\\", "")
@@ -74,11 +74,12 @@ func (s *S3Storage[T]) buildKey(paths ...string) string {
 	return path.Join(cleaned...)
 }
 
-func (s *S3Storage[T]) getFilename(path string) string {
+func (s *S3Storage) getFilename(path string) string {
 	return filepath.Base(path)
 }
 
-func (s *S3Storage[T]) Save(ctx context.Context, obj T, readyKey *string) (string, error) {
+func (s *S3Storage) Save(ctx context.Context, obj *model.Poster, readyKey *string) (string, error) {
+	fmt.Println("HERE!")
 	var key string
 	if readyKey == nil {
 		key = s.buildKey(s.prefix, obj.GetParent(), obj.GetFilename())
@@ -96,37 +97,31 @@ func (s *S3Storage[T]) Save(ctx context.Context, obj T, readyKey *string) (strin
 	return key, nil
 }
 
-func (s *S3Storage[T]) Load(ctx context.Context, readyKey string) (T, error) {
-	var zero T
+func (s *S3Storage) Load(ctx context.Context, readyKey string) (*model.Poster, error) {
 	resp, err := s.client.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: &s.bucketName,
 		Key:    &readyKey,
 	})
 	if err != nil {
-		return zero, fmt.Errorf("failed to load object from S3: %w", err)
+		return nil, fmt.Errorf("failed to load object from S3: %w", err)
 	}
 	defer resp.Body.Close()
 
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return zero, fmt.Errorf("failed to read object content: %w", err)
+		return nil, fmt.Errorf("failed to read object content: %w", err)
 	}
 
-	builder, ok := any(zero).(model.FileObjectBuilder)
-	if !ok {
-		return zero, fmt.Errorf("unsupported %v", zero)
-	}
-
-	obj := builder.NewFromData(data, s.getFilename(readyKey))
-	return obj.(T), nil
+	obj := (&model.Poster{}).NewFromData(data, s.getFilename(readyKey))
+	return obj.(*model.Poster), nil
 }
 
-func (s *S3Storage[T]) Update(ctx context.Context, key string, obj T) error {
+func (s *S3Storage) Update(ctx context.Context, key string, obj *model.Poster) error {
 	_, err := s.Save(ctx, obj, &key)
 	return err
 }
 
-func (s *S3Storage[T]) Delete(ctx context.Context, readyKey string) error {
+func (s *S3Storage) Delete(ctx context.Context, readyKey string) error {
 	_, err := s.client.DeleteObject(ctx, &s3.DeleteObjectInput{
 		Bucket: &s.bucketName,
 		Key:    &readyKey,
@@ -137,7 +132,7 @@ func (s *S3Storage[T]) Delete(ctx context.Context, readyKey string) error {
 	return nil
 }
 
-func (s *S3Storage[T]) GeneratePresignedURL(ctx context.Context, rawURL string, ttl time.Duration) (string, error) {
+func (s *S3Storage) GeneratePresignedURL(ctx context.Context, rawURL string, ttl time.Duration) (string, error) {
 	presignClient := s3.NewPresignClient(s.client)
 
 	req, err := presignClient.PresignGetObject(ctx, &s3.GetObjectInput{

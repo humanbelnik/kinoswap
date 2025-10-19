@@ -1,6 +1,15 @@
 
 mock-usecase-deps: mock-vote-usecase-deps mock-room-usecase-deps mock-movie-usecase-deps
 
+usecase-mocks:
+	go generate ./...
+
+run-storages:
+	docker-compose up --build migrate redis
+
+swagger:
+	swag init -g cmd/app/main.go
+
 mock-vote-usecase-deps:
 	mockery --dir ./internal/usecase/vote --name VoteRepository --output ./mocks/vote/repository --filename vote.go
 

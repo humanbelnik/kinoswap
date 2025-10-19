@@ -10,210 +10,261 @@ import (
 	"github.com/humanbelnik/kinoswap/core/internal/model"
 )
 
+// ! Convention
+// ! Return ErrResourceNotFound if there're no such resource.
+// ! ex. don't return empty collections on queries with error equal to nil. Return apropriate error instead
 var (
-	ErrInvalidInput           = errors.New("invalid input")
-	ErrFailedToStoreMeta      = errors.New("failed to store meta")
-	ErrFailedToLoadMeta       = errors.New("failed to load meta")
-	ErrFailedToUpdateMeta     = errors.New("failed to update meta")
-	ErrFailedToDeleteMeta     = errors.New("failed to delete meta")
-	ErrFailedToGetPreferences = errors.New("failed to get preferences")
-	ErrFailedToKNN            = errors.New("failed to KNN")
-	ErrFailedToReduce         = errors.New("failed to reduce")
-
-	ErrFailedToStorePoster    = errors.New("failed to store poster")
-	ErrFailedToBuildEmbedding = errors.New("failed to build embedding")
-	ErrFailedToStoreEmbedding = errors.New("failed to store embedding")
-	ErrFailedToPresignURLs    = errors.New("failed to presign urls")
-
-	ErrFailedToCheckExists = errors.New("failed to check exists")
+	ErrInternal                  = errors.New("internal error")
+	ErrResourceNotFound          = errors.New("no such resource")
+	ErrInvalidEmbeddingDimension = errors.New("invalid embedding dimension")
 )
 
-type MovieRepository interface {
+//go:generate mockery --name=MetaRepository --output=./mocks/movie/repository --filename=meta_repository.go
+type MetaRepository interface {
 	Store(ctx context.Context, mm model.MovieMeta) error
-	DeleteByID(ctx context.Context, ID uuid.UUID) error
-
-	Load(ctx context.Context) ([]*model.MovieMeta, error)
-	LoadByID(ctx context.Context, ID uuid.UUID) (model.MovieMeta, error)
-	LoadByIDs(ctx context.Context, IDs []uuid.UUID) ([]*model.MovieMeta, error)
-
+	Delete(ectx context.Context, id uuid.UUID) error
+	LoadAll(ctx context.Context) ([]*model.MovieMeta, error)
+	LoadSome(ctx context.Context, ids []uuid.UUID) ([]*model.MovieMeta, error)
 	Exists(ctx context.Context, id uuid.UUID) (bool, error)
-
-	Update(ctx context.Context, mm model.MovieMeta) error
-
-	KNN(ctx context.Context, k int, e model.Embedding) ([]*model.MovieMeta, error)
+	StoreEmbedding(ctx context.Context, id uuid.UUID, e model.Embedding) error
 }
 
-type PosterStorage[T model.FileObject] interface {
-	Save(ctx context.Context, object T, readyKey *string) (string, error)
-	Delete(ctx context.Context, K string) error
-
-	Load(ctx context.Context, K string) (T, error)
-
-	GeneratePresignedURL(ctx context.Context, rawURL string, ttl time.Duration) (string, error)
-}
-
+//go:generate mockery --name=Embedder --output=./mocks/movie/embedder --filename=embedder.go
 type Embedder interface {
 	BuildMovieEmbedding(ctx context.Context, mm model.MovieMeta) (model.Embedding, error)
 }
 
-type EmbeddingRepository interface {
-	Store(ctx context.Context, movieID uuid.UUID, e model.Embedding) error
-	//LoadPreferenceEmbeddings(ctx context.Context, roomID model.RoomID) ([]*model.Embedding, error)
-}
-
+//go:generate mockery --name=EmbeddingReducer --output=./mocks/movie/embedder --filename=embedding_reducer.go
 type EmbeddingReducer interface {
 	Reduce(ems []*model.Embedding) model.Embedding
 }
 
-type Usecase[T model.FileObject] struct {
-	posterStorage PosterStorage[T]
-
-	embedder            Embedder
-	metaRepository      MovieRepository
-	embeddingRepository EmbeddingRepository
-	embeddingReducer    EmbeddingReducer
+//go:generate mockery --name=PosterRepository --output=./mocks/movie/repository --filename=poster_repository.go
+type PosterRepository interface {
+	Save(ctx context.Context, object *model.Poster, readyKey *string) (string, error)
+	Delete(ctx context.Context, key string) error
+	Load(ctx context.Context, key string) (*model.Poster, error)
+	GeneratePresignedURL(ctx context.Context, rawURL string, ttl time.Duration) (string, error)
 }
 
-func New[T model.FileObject](
-	posterStorage PosterStorage[T],
+type Usecase struct {
+	metaRepository   MetaRepository
+	posterRepository PosterRepository
+	embedder         Embedder
+	embeddingReducer EmbeddingReducer
+}
+
+func New(
+	metaRepository MetaRepository,
+	posterRepository PosterRepository,
 	embedder Embedder,
-	meta MovieRepository,
-	embeddingRepo EmbeddingRepository,
 	embeddingReducer EmbeddingReducer,
-) *Usecase[T] {
-	return &Usecase[T]{
-		posterStorage:       posterStorage,
-		embedder:            embedder,
-		metaRepository:      meta,
-		embeddingRepository: embeddingRepo,
-		embeddingReducer:    embeddingReducer,
+) *Usecase {
+	return &Usecase{
+		metaRepository:   metaRepository,
+		posterRepository: posterRepository,
+		embedder:         embedder,
+		embeddingReducer: embeddingReducer,
 	}
 }
 
-// func (u *Usecase[T]) KMostRelevantMovies(ctx context.Context, roomID model.RoomID, K int) ([]*model.MovieMeta, error) {
-// 	if K <= 0 {
-// 		return nil, fmt.Errorf("%w: K must be positive", ErrInvalidInput)
-// 	}
+// Implement Functional builder patter for Movie upload.
+// - Store meta
+// - Store Poster file (if specified)
+// - Get embedding from external embedder
+// - Store embedding in meta
+// If something goes wrong, rollback to the beginning state
 
-// 	prefs, err := u.embeddingRepository.LoadPreferenceEmbeddings(ctx, roomID)
-// 	if err != nil {
-// 		return nil, fmt.Errorf("%w:%w", ErrFailedToGetPreferences, err)
-// 	}
+type Op struct {
+	exec     func(ctx context.Context) error
+	rollback func(ctx context.Context) error
+}
 
-// 	reducedPref, err := func() (pref model.Embedding, err error) {
-// 		defer func() {
-// 			if r := recover(); r != nil {
-// 				err = ErrFailedToReduce
-// 			}
-// 		}()
-// 		pref = u.embeddingReducer.Reduce(prefs)
-// 		return pref, nil
-// 	}()
+type MovieBuilder struct {
+	ops   []Op
+	uc    *Usecase
+	movie model.Movie
+}
 
-// 	if err != nil {
-// 		return nil, err
-// 	}
-
-// 	mms, err := u.metaRepository.KNN(ctx, K, reducedPref)
-// 	if err != nil {
-// 		return nil, fmt.Errorf("%w:%w", ErrFailedToKNN, err)
-// 	}
-
-// 	return mms, nil
-// }
-
-func (u *Usecase[T]) Upload(ctx context.Context, movie model.Movie) error {
-	ID := movie.MM.ID
-	if ID == uuid.Nil {
-		ID = uuid.New()
-		movie.MM.ID = ID
-
+func NewMovieBuilder(u *Usecase, movie model.Movie) *MovieBuilder {
+	if movie.MM.ID == uuid.Nil {
+		movie.MM.ID = uuid.New()
 	}
 
-	strID := ID.String()
-	if err := u.metaRepository.Store(ctx, *movie.MM); err != nil {
-		return fmt.Errorf("%w: %w", ErrFailedToStoreMeta, err)
+	return &MovieBuilder{
+		movie: movie,
+		uc:    u,
+	}
+}
+
+func (b *MovieBuilder) WithMeta(ctx context.Context) *MovieBuilder {
+	op := Op{
+		exec: func(ctx context.Context) error {
+			err := b.uc.metaRepository.Store(ctx, *b.movie.MM)
+			if err != nil {
+				return errors.Join(ErrInternal, err)
+			}
+			return nil
+		},
+		rollback: func(ctx context.Context) error {
+			fmt.Println("FUCKKKK")
+			return b.uc.metaRepository.Delete(ctx, b.movie.MM.ID)
+		},
+	}
+	b.ops = append(b.ops, op)
+	return b
+}
+
+func (b *MovieBuilder) WithPoster(ctx context.Context) *MovieBuilder {
+	if b.movie.Poster == nil {
+		return b
 	}
 
-	if movie.Poster != nil {
-		movie.MM.PosterLink = strID
-		typedPoster := any(&model.Poster{
-			Filename: strID,
-			Content:  movie.Poster.Content,
-			MovieID:  movie.Poster.MovieID,
-		}).(T)
+	strID := b.movie.MM.ID.String()
+	b.movie.MM.PosterLink = strID
 
-		if _, err := u.posterStorage.Save(ctx, typedPoster, &strID); err != nil {
-			_ = u.metaRepository.DeleteByID(ctx, movie.MM.ID)
-			return fmt.Errorf("%w:%w", ErrFailedToStorePoster, err)
+	op := Op{
+		exec: func(ctx context.Context) error {
+			_, err := b.uc.posterRepository.Save(ctx, &model.Poster{
+				Filename: strID,
+				Content:  b.movie.Poster.Content,
+				MovieID:  b.movie.Poster.MovieID,
+			}, &strID)
+			if err != nil {
+				return errors.Join(ErrInternal, err)
+			}
+			return nil
+		},
+		rollback: func(ctx context.Context) error {
+			return b.uc.posterRepository.Delete(ctx, b.movie.MM.PosterLink)
+		},
+	}
+	b.ops = append(b.ops, op)
+	return b
+}
+
+func (b *MovieBuilder) WithEmbedding(ctx context.Context) *MovieBuilder {
+	op := Op{
+		exec: func(ctx context.Context) error {
+			emb, err := b.uc.embedder.BuildMovieEmbedding(ctx, *b.movie.MM)
+			if err != nil {
+				return errors.Join(ErrInternal, err)
+			}
+			if len(emb) != model.EmbeddingDimension {
+				return ErrInvalidEmbeddingDimension
+			}
+			err = b.uc.metaRepository.StoreEmbedding(ctx, b.movie.MM.ID, emb)
+			if err != nil {
+				return errors.Join(ErrInternal, err)
+			}
+			return nil
+		},
+		rollback: func(ctx context.Context) error {
+			return nil
+		},
+	}
+	b.ops = append(b.ops, op)
+	return b
+}
+
+func (b *MovieBuilder) Execute(ctx context.Context) error {
+	var successfullyCompletedOps int
+
+	for _, op := range b.ops {
+		if err := op.exec(ctx); err != nil {
+			b.rollback(ctx, successfullyCompletedOps)
+			return err
+		}
+		successfullyCompletedOps++
+	}
+
+	return nil
+}
+
+func (b *MovieBuilder) rollback(ctx context.Context, completedOpsCount int) {
+	for i := completedOpsCount; i > -1; i-- {
+		if b.ops[i].rollback != nil {
+			if err := b.ops[i].rollback(ctx); err != nil {
+			}
 		}
 	}
-	emb, err := u.embedder.BuildMovieEmbedding(ctx, *movie.MM)
+}
+
+func (u *Usecase) Upload(ctx context.Context, movie model.Movie) error {
+	return NewMovieBuilder(u, movie).
+		WithMeta(ctx).
+		WithPoster(ctx).
+		WithEmbedding(ctx).
+		Execute(ctx)
+}
+
+func (u *Usecase) Delete(ctx context.Context, id uuid.UUID) error {
+	exists, err := u.Exists(ctx, id)
 	if err != nil {
-		_ = u.posterStorage.Delete(ctx, movie.MM.PosterLink)
-		_ = u.metaRepository.DeleteByID(ctx, movie.MM.ID)
-		return fmt.Errorf("%w : %w", ErrFailedToBuildEmbedding, err)
+		return errors.Join(ErrInternal, err)
 	}
 
-	if err = u.embeddingRepository.Store(ctx, movie.MM.ID, emb); err != nil {
-		fmt.Println(err)
-		_ = u.posterStorage.Delete(ctx, movie.MM.PosterLink)
-		_ = u.metaRepository.DeleteByID(ctx, movie.MM.ID)
-		return fmt.Errorf("%w : %w", ErrFailedToStoreEmbedding, err)
+	if !exists {
+		return ErrResourceNotFound
+	}
+
+	if err := u.metaRepository.Delete(ctx, id); err != nil {
+		return errors.Join(ErrInternal, err)
+	}
+
+	if err := u.posterRepository.Delete(ctx, id.String()); err != nil {
+		return errors.Join(ErrInternal, err)
 	}
 
 	return nil
 }
 
-func (u *Usecase[T]) DeleteMovie(ctx context.Context, id uuid.UUID) error {
-	_ = u.posterStorage.Delete(ctx, id.String())
-	_ = u.metaRepository.DeleteByID(ctx, id)
-	return nil
-}
-
-func (u *Usecase[T]) Exists(ctx context.Context, id uuid.UUID) (bool, error) {
+func (u *Usecase) Exists(ctx context.Context, id uuid.UUID) (bool, error) {
 	exists, err := u.metaRepository.Exists(ctx, id)
 	if err != nil {
-		return false, fmt.Errorf("%w : %w", ErrFailedToCheckExists, err)
+		return false, errors.Join(ErrInternal, err)
 	}
 	return exists, nil
 }
 
-func (u *Usecase[T]) UpdateMovie(ctx context.Context, mm model.MovieMeta) error {
-	if err := u.metaRepository.Update(ctx, mm); err != nil {
-		return fmt.Errorf("%w : %w", ErrFailedToUpdateMeta, err)
+// Giving presigned URLs to access files from S3 directly from the client
+func (u *Usecase) LoadAll(ctx context.Context) ([]*model.MovieMeta, error) {
+	mm, err := u.metaRepository.LoadAll(ctx)
+	if err != nil {
+		return nil, errors.Join(ErrInternal, err)
 	}
 
-	go func() {
-		/*
-			Don't use parent HTTP context on async tasks.
-			Parent context cancels when response is made.
-		*/
-		ctx := context.Background()
-		e, err := u.embedder.BuildMovieEmbedding(ctx, mm)
-		if err != nil {
-			//! Logging
-			return
-		}
-		if err := u.embeddingRepository.Store(ctx, mm.ID, e); err != nil {
-			//! Logging
-			return
-		}
-	}()
-	return nil
-}
-
-func (u *Usecase[T]) Load(ctx context.Context) ([]*model.MovieMeta, error) {
-	mm, err := u.metaRepository.Load(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("%w:%w", ErrFailedToLoadMeta, err)
+	if len(mm) == 0 {
+		return nil, ErrResourceNotFound
 	}
 
 	for _, m := range mm {
 		if m.PosterLink != "" {
-			m.PosterLink, err = u.posterStorage.GeneratePresignedURL(ctx, m.PosterLink, 10*time.Minute)
+			m.PosterLink, err = u.posterRepository.GeneratePresignedURL(ctx, m.PosterLink, 10*time.Minute)
 			if err != nil {
-				return nil, fmt.Errorf("%w : %w", ErrFailedToPresignURLs, err)
+				return nil, errors.Join(ErrInternal, err)
+			}
+		}
+	}
+
+	return mm, nil
+}
+
+func (u *Usecase) LoadSome(ctx context.Context, ids []uuid.UUID) ([]*model.MovieMeta, error) {
+	mm, err := u.metaRepository.LoadSome(ctx, ids)
+	if err != nil {
+		return nil, errors.Join(ErrInternal, err)
+	}
+
+	if len(mm) == 0 {
+		return nil, ErrResourceNotFound
+	}
+
+	for _, m := range mm {
+		if m.PosterLink != "" {
+			m.PosterLink, err = u.posterRepository.GeneratePresignedURL(ctx, m.PosterLink, 10*time.Minute)
+			if err != nil {
+				return nil, errors.Join(ErrInternal, err)
 			}
 		}
 	}

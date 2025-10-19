@@ -15,8 +15,68 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/auth": {
+            "post": {
+                "description": "Проверяет код и возвращает токен в заголовке X-admin-token для доступа к защищенным endpoint",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Auth operations"
+                ],
+                "summary": "Аутентификация пользователя",
+                "parameters": [
+                    {
+                        "description": "Данные для аутентификации",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/http_auth.AuthRequestDTO"
+                        }
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "headers": {
+                            "X-admin-token": {
+                                "type": "string",
+                                "description": "Токен для доступа к операцями с фильмами"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Неверный формат запроса",
+                        "schema": {
+                            "$ref": "#/definitions/http_common.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Неверный код аутентификации",
+                        "schema": {
+                            "$ref": "#/definitions/http_common.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Внутренняя ошибка сервера",
+                        "schema": {
+                            "$ref": "#/definitions/http_common.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/movies": {
             "get": {
+                "security": [
+                    {
+                        "AdminToken": []
+                    }
+                ],
                 "description": "Возвращает список всех фильмов в системе",
                 "produces": [
                     "application/json"
@@ -41,9 +101,14 @@ const docTemplate = `{
                 }
             },
             "post": {
-                "description": "Создает новый фильм в системе",
+                "security": [
+                    {
+                        "AdminToken": []
+                    }
+                ],
+                "description": "Создает новый фильм в системе. Принимает multipart/form-data с JSON данными о фильме и опциональным файлом постера",
                 "consumes": [
-                    "application/json"
+                    "multipart/form-data"
                 ],
                 "produces": [
                     "application/json"
@@ -54,13 +119,18 @@ const docTemplate = `{
                 "summary": "Создание фильма",
                 "parameters": [
                     {
-                        "description": "Данные для создания фильма",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/http_movie.CreateMovieRequestDTO"
-                        }
+                        "type": "string",
+                        "example": "{\"title\":\"Inception\",\"year\":2010,\"rating\":8.8,\"genres\":[\"sci-fi\",\"action\"],\"overview\":\"A thief who steals corporate secrets...\"}",
+                        "description": "Данные фильма в JSON формате",
+                        "name": "body",
+                        "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "file",
+                        "description": "Файл постера ",
+                        "name": "file",
+                        "in": "formData"
                     }
                 ],
                 "responses": {
@@ -68,7 +138,7 @@ const docTemplate = `{
                         "description": "Фильм успешно создан"
                     },
                     "400": {
-                        "description": "Некорректные данные запроса",
+                        "description": "Некорректные данные запроса: невалидный JSON, отсутствует поле body",
                         "schema": {
                             "$ref": "#/definitions/http_common.ErrorResponse"
                         }
@@ -83,62 +153,12 @@ const docTemplate = `{
             }
         },
         "/movies/{id}": {
-            "put": {
-                "description": "Обновляет данные фильма по идентификатору",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Movies operations"
-                ],
-                "summary": "Обновление фильма",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "example": "\"550e8400-e29b-41d4-a716-446655440000\"",
-                        "description": "UUID фильма",
-                        "name": "movie_id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Данные для обновления фильма",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/http_movie.UpdateMovieRequestDTO"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Фильм успешно обновлен"
-                    },
-                    "400": {
-                        "description": "Некорректные данные запроса",
-                        "schema": {
-                            "$ref": "#/definitions/http_common.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Фильм не найден",
-                        "schema": {
-                            "$ref": "#/definitions/http_common.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Внутренняя ошибка сервера",
-                        "schema": {
-                            "$ref": "#/definitions/http_common.ErrorResponse"
-                        }
-                    }
-                }
-            },
             "delete": {
+                "security": [
+                    {
+                        "AdminToken": []
+                    }
+                ],
                 "description": "Удаляет фильм по идентификатору",
                 "produces": [
                     "application/json"
@@ -332,48 +352,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/rooms/{room_id}/voting/movies": {
-            "get": {
-                "description": "Возвращает список фильмов доступных для голосования в комнате",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Movies operations"
-                ],
-                "summary": "Получение фильмов для голосования",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "example": "\"550e8400-e29b-41d4-a716-446655440000\"",
-                        "description": "Идентификатор комнаты",
-                        "name": "room_id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Список фильмов для голосования",
-                        "schema": {
-                            "$ref": "#/definitions/http_movie.MoviesListResponseDTO"
-                        }
-                    },
-                    "404": {
-                        "description": "Комната не найдена",
-                        "schema": {
-                            "$ref": "#/definitions/http_common.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Внутренняя ошибка сервера",
-                        "schema": {
-                            "$ref": "#/definitions/http_common.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
         "/rooms/{room_id}/voting/results": {
             "get": {
                 "description": "Возвращает массив фильмов с количеством лайков для текущей или завершенной сессии голосования",
@@ -511,56 +489,24 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "http_auth.AuthRequestDTO": {
+            "type": "object",
+            "required": [
+                "code"
+            ],
+            "properties": {
+                "code": {
+                    "type": "string",
+                    "example": "secret123"
+                }
+            }
+        },
         "http_common.ErrorResponse": {
             "type": "object",
             "properties": {
                 "message": {
                     "type": "string",
                     "example": "something bad happened..."
-                }
-            }
-        },
-        "http_movie.CreateMovieRequestDTO": {
-            "type": "object",
-            "required": [
-                "genres",
-                "overview",
-                "poster_link",
-                "rating",
-                "title",
-                "year"
-            ],
-            "properties": {
-                "genres": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    },
-                    "example": [
-                        "фантастика",
-                        "драма",
-                        "приключения"
-                    ]
-                },
-                "overview": {
-                    "type": "string",
-                    "example": "Захватывающая история о путешествии через червоточину..."
-                },
-                "poster_link": {
-                    "type": "string",
-                    "example": "https://example.com/poster.jpg"
-                },
-                "rating": {
-                    "type": "number",
-                    "example": 8.6
-                },
-                "title": {
-                    "type": "string",
-                    "example": "Интерстеллар"
-                },
-                "year": {
-                    "type": "integer",
-                    "example": 2014
                 }
             }
         },
@@ -615,42 +561,6 @@ const docTemplate = `{
                 },
                 "total": {
                     "type": "integer"
-                }
-            }
-        },
-        "http_movie.UpdateMovieRequestDTO": {
-            "type": "object",
-            "properties": {
-                "genres": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    },
-                    "example": [
-                        "фантастика",
-                        "драма",
-                        "приключения"
-                    ]
-                },
-                "overview": {
-                    "type": "string",
-                    "example": "Обновленное описание фильма..."
-                },
-                "poster_link": {
-                    "type": "string",
-                    "example": "https://example.com/new-poster.jpg"
-                },
-                "rating": {
-                    "type": "number",
-                    "example": 8.7
-                },
-                "title": {
-                    "type": "string",
-                    "example": "Интерстеллар (обновленное)"
-                },
-                "year": {
-                    "type": "integer",
-                    "example": 2014
                 }
             }
         },
@@ -752,6 +662,13 @@ const docTemplate = `{
                     "example": "active"
                 }
             }
+        }
+    },
+    "securityDefinitions": {
+        "AdminToken": {
+            "type": "apiKey",
+            "name": "X-admin-token",
+            "in": "header"
         }
     }
 }`

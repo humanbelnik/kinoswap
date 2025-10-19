@@ -5,12 +5,12 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"os"
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
 	http_common "github.com/humanbelnik/kinoswap/core/internal/delivery/http/common"
+	http_auth_middleware "github.com/humanbelnik/kinoswap/core/internal/delivery/http/middleware/auth"
 	ws_room "github.com/humanbelnik/kinoswap/core/internal/delivery/ws/room"
 	"github.com/humanbelnik/kinoswap/core/internal/model"
 	usecase_movie "github.com/humanbelnik/kinoswap/core/internal/usecase/movie"
@@ -78,28 +78,32 @@ func ConvertFromMovieMetaList(metas []*model.MovieMeta) []MovieResponseDTO {
 	return movies
 }
 
-type Controller[T model.FileObject] struct {
-	uc  *usecase_movie.Usecase[T]
+type Controller struct {
+	uc  *usecase_movie.Usecase
 	hub *ws_room.Hub
+
+	authMiddleware *http_auth_middleware.Middleware
 
 	logger *slog.Logger
 }
 
-type ControllerOption[T model.FileObject] func(*Controller[T])
+type ControllerOption func(*Controller)
 
-func WithLogger[T model.FileObject](logger *slog.Logger) ControllerOption[T] {
-	return func(c *Controller[T]) {
+func WithLogger(logger *slog.Logger) ControllerOption {
+	return func(c *Controller) {
 		c.logger = logger
 	}
 }
 
-func New[T model.FileObject](uc *usecase_movie.Usecase[T],
+func New(uc *usecase_movie.Usecase,
+	authMiddleware *http_auth_middleware.Middleware,
 	hub *ws_room.Hub,
-	opts ...ControllerOption[T]) *Controller[T] {
-	c := &Controller[T]{
-		uc:     uc,
-		hub:    hub,
-		logger: slog.Default(),
+	opts ...ControllerOption) *Controller {
+	c := &Controller{
+		uc:             uc,
+		authMiddleware: authMiddleware,
+		hub:            hub,
+		logger:         slog.Default(),
 	}
 	for _, opt := range opts {
 		opt(c)
@@ -107,46 +111,13 @@ func New[T model.FileObject](uc *usecase_movie.Usecase[T],
 	return c
 }
 
-func (c *Controller[T]) RegisterRoutes(router *gin.RouterGroup) {
+func (c *Controller) RegisterRoutes(router *gin.RouterGroup) {
 	movies := router.Group("/movies")
-	movies.Use(c.authMiddleware)
+	movies.Use(c.authMiddleware.AuthRequired())
 
 	movies.POST("", c.createMovie)
 	movies.GET("", c.getMovies)
 	movies.DELETE("/:movie_id", c.deleteMovie)
-}
-
-func (c *Controller[T]) authMiddleware(ctx *gin.Context) {
-	t := ctx.GetHeader("X-admin-token")
-	if t == "" {
-		ctx.JSON(http.StatusUnauthorized, http_common.ErrorResponse{
-			Message: "X-admin-token invalid",
-		})
-		ctx.Abort()
-		return
-	}
-
-	valid, err := c.validateToken(ctx, t)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, http_common.ErrorResponse{
-			Message: "error on token validation",
-		})
-		ctx.Abort()
-		return
-	}
-	if !valid {
-		ctx.JSON(http.StatusUnauthorized, http_common.ErrorResponse{
-			Message: "unauthorized",
-		})
-		ctx.Abort()
-		return
-	}
-	ctx.Next()
-}
-
-func (c *Controller[T]) validateToken(ctx *gin.Context, t string) (bool, error) {
-	masterToken := os.Getenv("ADMIN_TOKEN")
-	return masterToken == t, nil
 }
 
 // @Summary Создание фильма
@@ -159,8 +130,9 @@ func (c *Controller[T]) validateToken(ctx *gin.Context, t string) (bool, error) 
 // @Success 201 "Фильм успешно создан"
 // @Failure 400 {object} http_common.ErrorResponse "Некорректные данные запроса: невалидный JSON, отсутствует поле body"
 // @Failure 500 {object} http_common.ErrorResponse "Внутренняя ошибка сервера"
+// @Security AdminToken
 // @Router /movies [post]
-func (c *Controller[T]) createMovie(ctx *gin.Context) {
+func (c *Controller) createMovie(ctx *gin.Context) {
 	form, err := ctx.MultipartForm()
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, http_common.ErrorResponse{
@@ -223,6 +195,7 @@ func (c *Controller[T]) createMovie(ctx *gin.Context) {
 		Poster: poster,
 	}
 	if err := c.uc.Upload(ctx.Request.Context(), movie); err != nil {
+		c.logger.Error("failed to create movies", slog.String("error", err.Error()))
 		ctx.JSON(http.StatusInternalServerError, http_common.ErrorResponse{
 			Message: "Failed to create movie",
 		})
@@ -239,14 +212,22 @@ func (c *Controller[T]) createMovie(ctx *gin.Context) {
 // @Produce json
 // @Success 200 {object} MoviesListResponseDTO "Список фильмов успешно получен"
 // @Failure 500 {object} http_common.ErrorResponse "Внутренняя ошибка сервера"
+// @Security AdminToken
 // @Router /movies [get]
-func (c *Controller[T]) getMovies(ctx *gin.Context) {
-	movies, err := c.uc.Load(ctx.Request.Context())
+func (c *Controller) getMovies(ctx *gin.Context) {
+	movies, err := c.uc.LoadAll(ctx.Request.Context())
 	if err != nil {
 		c.logger.Error("failed to load movies", slog.String("error", err.Error()))
-		ctx.JSON(http.StatusInternalServerError, http_common.ErrorResponse{
-			Message: "internal error",
-		})
+		switch err {
+		case usecase_movie.ErrInternal:
+			ctx.JSON(http.StatusInternalServerError, http_common.ErrorResponse{
+				Message: "internal error",
+			})
+		case usecase_movie.ErrResourceNotFound:
+			ctx.JSON(http.StatusNotFound, http_common.ErrorResponse{
+				Message: "not found",
+			})
+		}
 		return
 	}
 
@@ -268,8 +249,9 @@ func (c *Controller[T]) getMovies(ctx *gin.Context) {
 // @Failure 400 {object} http_common.ErrorResponse "Некорректный UUID фильма"
 // @Failure 404 {object} http_common.ErrorResponse "Фильм не найден"
 // @Failure 500 {object} http_common.ErrorResponse "Внутренняя ошибка сервера"
+// @Security AdminToken
 // @Router /movies/{id} [delete]
-func (c *Controller[T]) deleteMovie(ctx *gin.Context) {
+func (c *Controller) deleteMovie(ctx *gin.Context) {
 	movieID, err := uuid.Parse(ctx.Param("movie_id"))
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, http_common.ErrorResponse{
@@ -278,10 +260,18 @@ func (c *Controller[T]) deleteMovie(ctx *gin.Context) {
 		return
 	}
 
-	if err := c.uc.DeleteMovie(ctx.Request.Context(), movieID); err != nil {
-		ctx.JSON(http.StatusInternalServerError, http_common.ErrorResponse{
-			Message: "failed to delete resource",
-		})
+	if err := c.uc.Delete(ctx.Request.Context(), movieID); err != nil {
+		c.logger.Error("failed to load movies", slog.String("error", err.Error()))
+		switch err {
+		case usecase_movie.ErrInternal:
+			ctx.JSON(http.StatusInternalServerError, http_common.ErrorResponse{
+				Message: "internal error",
+			})
+		case usecase_movie.ErrResourceNotFound:
+			ctx.JSON(http.StatusNotFound, http_common.ErrorResponse{
+				Message: "not found",
+			})
+		}
 		return
 	}
 
