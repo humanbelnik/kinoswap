@@ -130,6 +130,7 @@ func (c *Controller) RegisterRoutes(router *gin.RouterGroup) {
 // @Success 201 "Фильм успешно создан"
 // @Failure 400 {object} http_common.ErrorResponse "Некорректные данные запроса: невалидный JSON, отсутствует поле body"
 // @Failure 500 {object} http_common.ErrorResponse "Внутренняя ошибка сервера"
+// @Security AdminToken
 // @Router /movies [post]
 func (c *Controller) createMovie(ctx *gin.Context) {
 	form, err := ctx.MultipartForm()
@@ -211,6 +212,7 @@ func (c *Controller) createMovie(ctx *gin.Context) {
 // @Produce json
 // @Success 200 {object} MoviesListResponseDTO "Список фильмов успешно получен"
 // @Failure 500 {object} http_common.ErrorResponse "Внутренняя ошибка сервера"
+// @Security AdminToken
 // @Router /movies [get]
 func (c *Controller) getMovies(ctx *gin.Context) {
 	movies, err := c.uc.LoadAll(ctx.Request.Context())
@@ -247,6 +249,7 @@ func (c *Controller) getMovies(ctx *gin.Context) {
 // @Failure 400 {object} http_common.ErrorResponse "Некорректный UUID фильма"
 // @Failure 404 {object} http_common.ErrorResponse "Фильм не найден"
 // @Failure 500 {object} http_common.ErrorResponse "Внутренняя ошибка сервера"
+// @Security AdminToken
 // @Router /movies/{id} [delete]
 func (c *Controller) deleteMovie(ctx *gin.Context) {
 	movieID, err := uuid.Parse(ctx.Param("movie_id"))

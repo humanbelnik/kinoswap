@@ -1,43 +1,18 @@
 basePath: /api/v1/
 definitions:
+  http_auth.AuthRequestDTO:
+    properties:
+      code:
+        example: secret123
+        type: string
+    required:
+    - code
+    type: object
   http_common.ErrorResponse:
     properties:
       message:
         example: something bad happened...
         type: string
-    type: object
-  http_movie.CreateMovieRequestDTO:
-    properties:
-      genres:
-        example:
-        - фантастика
-        - драма
-        - приключения
-        items:
-          type: string
-        type: array
-      overview:
-        example: Захватывающая история о путешествии через червоточину...
-        type: string
-      poster_link:
-        example: https://example.com/poster.jpg
-        type: string
-      rating:
-        example: 8.6
-        type: number
-      title:
-        example: Интерстеллар
-        type: string
-      year:
-        example: 2014
-        type: integer
-    required:
-    - genres
-    - overview
-    - poster_link
-    - rating
-    - title
-    - year
     type: object
   http_movie.MovieResponseDTO:
     properties:
@@ -75,32 +50,6 @@ definitions:
           $ref: '#/definitions/http_movie.MovieResponseDTO'
         type: array
       total:
-        type: integer
-    type: object
-  http_movie.UpdateMovieRequestDTO:
-    properties:
-      genres:
-        example:
-        - фантастика
-        - драма
-        - приключения
-        items:
-          type: string
-        type: array
-      overview:
-        example: Обновленное описание фильма...
-        type: string
-      poster_link:
-        example: https://example.com/new-poster.jpg
-        type: string
-      rating:
-        example: 8.7
-        type: number
-      title:
-        example: Интерстеллар (обновленное)
-        type: string
-      year:
-        example: 2014
         type: integer
     type: object
   http_room.AcquireRoomResponseDTO:
@@ -178,6 +127,43 @@ info:
   title: Kinoswap API
   version: "1.0"
 paths:
+  /auth:
+    post:
+      consumes:
+      - application/json
+      description: Проверяет код и возвращает токен в заголовке X-admin-token для
+        доступа к защищенным endpoint
+      parameters:
+      - description: Данные для аутентификации
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/http_auth.AuthRequestDTO'
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Accepted
+          headers:
+            X-admin-token:
+              description: Токен для доступа к операцями с фильмами
+              type: string
+        "400":
+          description: Неверный формат запроса
+          schema:
+            $ref: '#/definitions/http_common.ErrorResponse'
+        "403":
+          description: Неверный код аутентификации
+          schema:
+            $ref: '#/definitions/http_common.ErrorResponse'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/http_common.ErrorResponse'
+      summary: Аутентификация пользователя
+      tags:
+      - Auth operations
   /movies:
     get:
       description: Возвращает список всех фильмов в системе
@@ -192,33 +178,44 @@ paths:
           description: Внутренняя ошибка сервера
           schema:
             $ref: '#/definitions/http_common.ErrorResponse'
+      security:
+      - AdminToken: []
       summary: Получение списка фильмов
       tags:
       - Movies operations
     post:
       consumes:
-      - application/json
-      description: Создает новый фильм в системе
+      - multipart/form-data
+      description: Создает новый фильм в системе. Принимает multipart/form-data с
+        JSON данными о фильме и опциональным файлом постера
       parameters:
-      - description: Данные для создания фильма
-        in: body
-        name: request
+      - description: Данные фильма в JSON формате
+        example: '{"title":"Inception","year":2010,"rating":8.8,"genres":["sci-fi","action"],"overview":"A
+          thief who steals corporate secrets..."}'
+        in: formData
+        name: body
         required: true
-        schema:
-          $ref: '#/definitions/http_movie.CreateMovieRequestDTO'
+        type: string
+      - description: 'Файл постера '
+        in: formData
+        name: file
+        type: file
       produces:
       - application/json
       responses:
         "201":
           description: Фильм успешно создан
         "400":
-          description: Некорректные данные запроса
+          description: 'Некорректные данные запроса: невалидный JSON, отсутствует
+            поле body'
           schema:
             $ref: '#/definitions/http_common.ErrorResponse'
         "500":
           description: Внутренняя ошибка сервера
           schema:
             $ref: '#/definitions/http_common.ErrorResponse'
+      security:
+      - AdminToken: []
       summary: Создание фильма
       tags:
       - Movies operations
@@ -249,44 +246,9 @@ paths:
           description: Внутренняя ошибка сервера
           schema:
             $ref: '#/definitions/http_common.ErrorResponse'
+      security:
+      - AdminToken: []
       summary: Удаление фильма
-      tags:
-      - Movies operations
-    put:
-      consumes:
-      - application/json
-      description: Обновляет данные фильма по идентификатору
-      parameters:
-      - description: UUID фильма
-        example: '"550e8400-e29b-41d4-a716-446655440000"'
-        in: path
-        name: movie_id
-        required: true
-        type: string
-      - description: Данные для обновления фильма
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/http_movie.UpdateMovieRequestDTO'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: Фильм успешно обновлен
-        "400":
-          description: Некорректные данные запроса
-          schema:
-            $ref: '#/definitions/http_common.ErrorResponse'
-        "404":
-          description: Фильм не найден
-          schema:
-            $ref: '#/definitions/http_common.ErrorResponse'
-        "500":
-          description: Внутренняя ошибка сервера
-          schema:
-            $ref: '#/definitions/http_common.ErrorResponse'
-      summary: Обновление фильма
       tags:
       - Movies operations
   /rooms:
@@ -391,34 +353,6 @@ paths:
       summary: Участие в комнате
       tags:
       - Rooms opertaions
-  /rooms/{room_id}/voting/movies:
-    get:
-      description: Возвращает список фильмов доступных для голосования в комнате
-      parameters:
-      - description: Идентификатор комнаты
-        example: '"550e8400-e29b-41d4-a716-446655440000"'
-        in: path
-        name: room_id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: Список фильмов для голосования
-          schema:
-            $ref: '#/definitions/http_movie.MoviesListResponseDTO'
-        "404":
-          description: Комната не найдена
-          schema:
-            $ref: '#/definitions/http_common.ErrorResponse'
-        "500":
-          description: Внутренняя ошибка сервера
-          schema:
-            $ref: '#/definitions/http_common.ErrorResponse'
-      summary: Получение фильмов для голосования
-      tags:
-      - Movies operations
   /rooms/{room_id}/voting/results:
     get:
       description: Возвращает массив фильмов с количеством лайков для текущей или
@@ -511,4 +445,9 @@ paths:
       summary: Отправить результаты голосования
       tags:
       - Voting operations
+securityDefinitions:
+  AdminToken:
+    in: header
+    name: X-admin-token
+    type: apiKey
 swagger: "2.0"
