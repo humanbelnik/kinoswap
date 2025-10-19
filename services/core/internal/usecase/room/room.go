@@ -26,6 +26,7 @@ type RoomRepository interface {
 	SetStatusByCode(ctx context.Context, code string, status string) error
 	AddPreferenceEmbedding(ctx context.Context, code string, userID uuid.UUID, prefEmbedding model.Embedding) error
 	ParticipantsCount(ctx context.Context, code string) (int, error)
+	IsParticipant(ctx context.Context, code string, userID uuid.UUID) (bool, error)
 }
 
 //go:generate mockery --name=Embedder --output=./mocks/room/Embedder --filename=Embedder.go
@@ -112,6 +113,23 @@ func (u *Usecase) IsOwner(ctx context.Context, code string, ownerID string) (boo
 	}
 
 	return isOwner, nil
+}
+
+func (u *Usecase) IsParticipant(ctx context.Context, code string, userID string) (bool, error) {
+	userUUID, err := uuid.Parse(userID)
+	if err != nil {
+		return false, errors.Join(ErrInternal, err)
+	}
+
+	isParticipant, err := u.RoomRepository.IsParticipant(ctx, code, userUUID)
+	if err != nil {
+		if errors.Is(err, ErrResourceNotFound) {
+			return false, ErrResourceNotFound
+		}
+		return false, errors.Join(ErrInternal, err)
+	}
+
+	return isParticipant, nil
 }
 
 func (u *Usecase) Free(ctx context.Context, code string) error {

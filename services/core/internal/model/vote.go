@@ -3,13 +3,18 @@ package model
 type Preference struct {
 	Text string
 }
-type Reaction = bool
+type Reaction = int
 
 const (
-	PassReaction  Reaction = true
-	SmashReaction Reaction = false
+	PassReaction  Reaction = 1
+	SmashReaction Reaction = 0
 )
 
-type VoteResult struct {
-	Results map[*MovieMeta]Reaction
+type Reactions struct {
+	Reactions map[*MovieMeta]Reaction
+}
+
+type Result struct {
+	MM    MovieMeta
+	Likes int
 }

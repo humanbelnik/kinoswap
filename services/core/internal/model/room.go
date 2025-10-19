@@ -5,8 +5,9 @@ import "github.com/google/uuid"
 type RoomStatus = string
 
 const (
-	StatusLobby  RoomStatus = "LOBBY"
-	StatusVoting RoomStatus = "VOTING"
+	StatusLobby    RoomStatus = "LOBBY"
+	StatusVoting   RoomStatus = "VOTING"
+	StatusFinished RoomStatus = "FINISHED"
 )
 
 type Room struct {
