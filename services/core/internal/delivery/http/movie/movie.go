@@ -5,12 +5,12 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"os"
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
 	http_common "github.com/humanbelnik/kinoswap/core/internal/delivery/http/common"
+	http_auth_middleware "github.com/humanbelnik/kinoswap/core/internal/delivery/http/middleware/auth"
 	ws_room "github.com/humanbelnik/kinoswap/core/internal/delivery/ws/room"
 	"github.com/humanbelnik/kinoswap/core/internal/model"
 	usecase_movie "github.com/humanbelnik/kinoswap/core/internal/usecase/movie"
@@ -82,6 +82,8 @@ type Controller struct {
 	uc  *usecase_movie.Usecase
 	hub *ws_room.Hub
 
+	authMiddleware *http_auth_middleware.Middleware
+
 	logger *slog.Logger
 }
 
@@ -94,12 +96,14 @@ func WithLogger(logger *slog.Logger) ControllerOption {
 }
 
 func New(uc *usecase_movie.Usecase,
+	authMiddleware *http_auth_middleware.Middleware,
 	hub *ws_room.Hub,
 	opts ...ControllerOption) *Controller {
 	c := &Controller{
-		uc:     uc,
-		hub:    hub,
-		logger: slog.Default(),
+		uc:             uc,
+		authMiddleware: authMiddleware,
+		hub:            hub,
+		logger:         slog.Default(),
 	}
 	for _, opt := range opts {
 		opt(c)
@@ -109,42 +113,11 @@ func New(uc *usecase_movie.Usecase,
 
 func (c *Controller) RegisterRoutes(router *gin.RouterGroup) {
 	movies := router.Group("/movies")
+	movies.Use(c.authMiddleware.AuthRequired())
+
 	movies.POST("", c.createMovie)
 	movies.GET("", c.getMovies)
 	movies.DELETE("/:movie_id", c.deleteMovie)
-}
-
-func (c *Controller) authMiddleware(ctx *gin.Context) {
-	t := ctx.GetHeader("X-admin-token")
-	if t == "" {
-		ctx.JSON(http.StatusUnauthorized, http_common.ErrorResponse{
-			Message: "X-admin-token invalid",
-		})
-		ctx.Abort()
-		return
-	}
-
-	valid, err := c.validateToken(ctx, t)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, http_common.ErrorResponse{
-			Message: "error on token validation",
-		})
-		ctx.Abort()
-		return
-	}
-	if !valid {
-		ctx.JSON(http.StatusUnauthorized, http_common.ErrorResponse{
-			Message: "unauthorized",
-		})
-		ctx.Abort()
-		return
-	}
-	ctx.Next()
-}
-
-func (c *Controller) validateToken(ctx *gin.Context, t string) (bool, error) {
-	masterToken := os.Getenv("ADMIN_TOKEN")
-	return masterToken == t, nil
 }
 
 // @Summary Создание фильма

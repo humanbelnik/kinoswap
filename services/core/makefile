@@ -4,8 +4,8 @@ mock-usecase-deps: mock-vote-usecase-deps mock-room-usecase-deps mock-movie-usec
 usecase-mocks:
 	go generate ./...
 
-run-postgres:
-	docker-compose up --build migrate
+run-storages:
+	docker-compose up --build migrate redis
 
 
 mock-vote-usecase-deps:
