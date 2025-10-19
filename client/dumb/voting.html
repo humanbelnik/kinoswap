@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Голосование - KinoSwap</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+        }
+        
+        .voting-container {
+            background: white;
+            color: #333;
+            padding: 40px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            text-align: center;
+            max-width: 500px;
+            width: 90%;
+        }
+        
+        .voting-container h1 {
+            color: #667eea;
+            margin-bottom: 20px;
+            font-size: 2.5em;
+        }
+        
+        .voting-container p {
+            margin-bottom: 15px;
+            font-size: 1.1em;
+            line-height: 1.6;
+        }
+        
+        .room-info {
+            background: #e8f4fd;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+            border-left: 4px solid #667eea;
+        }
+        
+        .voting-message {
+            font-size: 1.3em;
+            font-weight: bold;
+            color: #28a745;
+            margin: 25px 0;
+        }
+        
+        .back-button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1em;
+            margin-top: 20px;
+            transition: background 0.3s;
+        }
+        
+        .back-button:hover {
+            background: #5a6fd8;
+        }
+    </style>
+</head>
+<body>
+    <div class="voting-container">
+        <h1>🎬 Голосование началось!</h1>
+        
+        <div class="room-info">
+            <strong>Комната:</strong> <span id="room-code">Загрузка...</span>
+        </div>
+        
+        <div class="voting-message" id="voting-message">
+            Скоро здесь появятся фильмы для голосования!
+        </div>
+        
+        <p>Ожидайте появления списка фильмов...</p>
+        <p>Голосование будет доступно в ближайшее время.</p>
+        
+        <button class="back-button" onclick="goBack()">Вернуться назад</button>
+    </div>
+
+    <script>
+        // Получаем код комнаты из URL параметров
+        const urlParams = new URLSearchParams(window.location.search);
+        const roomCode = urlParams.get('room');
+        
+        if (roomCode) {
+            document.getElementById('room-code').textContent = roomCode;
+        }
+        
+        function goBack() {
+            window.history.back();
+        }
+        
+        // Можно добавить логику для получения фильмов и голосования
+        console.log('Голосование для комнаты:', roomCode);
+    </script>
+</body>
+</html>

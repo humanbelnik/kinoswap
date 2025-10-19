@@ -11,7 +11,6 @@ import (
 	"github.com/google/uuid"
 	http_common "github.com/humanbelnik/kinoswap/core/internal/delivery/http/common"
 	http_auth_middleware "github.com/humanbelnik/kinoswap/core/internal/delivery/http/middleware/auth"
-	ws_room "github.com/humanbelnik/kinoswap/core/internal/delivery/ws/room"
 	"github.com/humanbelnik/kinoswap/core/internal/model"
 	usecase_movie "github.com/humanbelnik/kinoswap/core/internal/usecase/movie"
 )
@@ -79,8 +78,7 @@ func ConvertFromMovieMetaList(metas []*model.MovieMeta) []MovieResponseDTO {
 }
 
 type Controller struct {
-	uc  *usecase_movie.Usecase
-	hub *ws_room.Hub
+	uc *usecase_movie.Usecase
 
 	authMiddleware *http_auth_middleware.Middleware
 
@@ -97,12 +95,10 @@ func WithLogger(logger *slog.Logger) ControllerOption {
 
 func New(uc *usecase_movie.Usecase,
 	authMiddleware *http_auth_middleware.Middleware,
-	hub *ws_room.Hub,
 	opts ...ControllerOption) *Controller {
 	c := &Controller{
 		uc:             uc,
 		authMiddleware: authMiddleware,
-		hub:            hub,
 		logger:         slog.Default(),
 	}
 	for _, opt := range opts {

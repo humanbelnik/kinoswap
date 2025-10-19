@@ -1,193 +1,234 @@
 package http_room
 
 import (
+	"errors"
 	"log/slog"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/gorilla/websocket"
 	http_common "github.com/humanbelnik/kinoswap/core/internal/delivery/http/common"
-	ws_room "github.com/humanbelnik/kinoswap/core/internal/delivery/ws/room"
 	"github.com/humanbelnik/kinoswap/core/internal/model"
 	usecase_room "github.com/humanbelnik/kinoswap/core/internal/usecase/room"
 )
 
-var upgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool {
-		return true
-	},
-}
-
 type Controller struct {
-	uc  *usecase_room.Usecase
-	hub *ws_room.Hub
-
-	logger *slog.Logger
+	usecase *usecase_room.Usecase
+	logger  *slog.Logger
 }
 
-type ControllerOption func(*Controller)
-
-func WithLogger(logger *slog.Logger) ControllerOption {
-	return func(c *Controller) {
-		c.logger = logger
+func New(usecase *usecase_room.Usecase) *Controller {
+	return &Controller{
+		usecase: usecase,
+		logger:  slog.Default(),
 	}
-}
-
-func New(uc *usecase_room.Usecase,
-	hub *ws_room.Hub,
-	opts ...ControllerOption) *Controller {
-	c := &Controller{
-		uc:     uc,
-		hub:    hub,
-		logger: slog.Default(),
-	}
-	for _, opt := range opts {
-		opt(c)
-	}
-	return c
 }
 
 func (c *Controller) RegisterRoutes(router *gin.RouterGroup) {
 	rooms := router.Group("/rooms")
-	rooms.GET("", c.acquireRoom)
-
-	room := router.Group("rooms/:room_id")
-	room.GET("/ws", c.roomWS)
-	room.GET("", c.isRoomAcquired)
-	room.POST("/participation", c.participate)
-	room.DELETE("", c.release)
+	{
+		rooms.POST("", c.book)
+		rooms.GET("/:room_id/status", c.status)
+		rooms.POST("/:room_id/participations", c.participate)
+		rooms.DELETE("/:room_id", c.free)
+	}
 }
 
-// AcquireRoomResponseDTO
-type AcquireRoomResponseDTO struct {
-	RoomID string `json:"room_id" example:"123456"`
+// BookResponseDTO DTO для ответа создания комнаты
+type BookResponseDTO struct {
+	RoomCode string `json:"room_code"`
 }
 
-// @Summary Выделить комнату для голосования
-// @Description Выделяет команату для голосования и возвращет ее идентификатор
-// @Tags Rooms opertaions
+// Book создает новую комнату
+// @Summary Создание комнаты
+// @Description Создает новую комнату для выбора фильмов
+// @Tags Rooms
 // @Accept json
 // @Produce json
-// @Success 200 {object} AcquireRoomResponseDTO "Комната успешно создана"
+// @Success 201 "Комната успешно создана"
+// @Header 201 {string} X-user-token "Токен владельца комнаты"
 // @Failure 500 {object} http_common.ErrorResponse "Внутренняя ошибка сервера"
-// @Router /rooms [get]
-func (c *Controller) acquireRoom(ctx *gin.Context) {
-	roomID, err := c.uc.AcquireRoom(ctx.Request.Context())
+// @Failure 503 {object} http_common.ErrorResponse "Ресур недоступен"
+// @Router /rooms [post]
+func (c *Controller) book(ctx *gin.Context) {
+	roomCode, ownerToken, err := c.usecase.Book(ctx)
 	if err != nil {
-		c.logger.Error("failed to acquire room",
-			slog.String("error", err.Error()),
-		)
-		ctx.JSON(http.StatusInternalServerError, http_common.ErrorResponse{Message: "internal error"})
+		c.logger.Error("failed to book room", slog.String("error", err.Error()))
+		switch err {
+		case usecase_room.ErrInternal:
+			ctx.JSON(http.StatusInternalServerError, http_common.ErrorResponse{
+				Message: "internal error",
+			})
+		case usecase_room.ErrRoomsUnavailable:
+			ctx.JSON(http.StatusServiceUnavailable, http_common.ErrorResponse{
+				Message: "unavailable",
+			})
+		}
 		return
 	}
 
-	ctx.JSON(http.StatusOK, AcquireRoomResponseDTO{RoomID: string(roomID)})
-}
-
-// @Summary Проверяет доступ к комнате
-// @Description Проверяет доступ к комнате
-// @Tags Rooms opertaions
-// @Produce json
-// @Param room_id path string true "Идентификатор комнаты" example("123456")
-// @Success 200 "Комната существует"
-// @Failure 403 {objet} http_common.ErrorResponse "Комната закрыта"
-// @Failure 500 {object} http_common.ErrorResponse "Внутренняя ошибка сервера"
-// @Router /rooms/{room_id} [get]
-func (c *Controller) isRoomAcquired(ctx *gin.Context) {
-	roomID := ctx.Param("room_id")
-	ok, err := c.uc.IsRoomAcquired(ctx.Request.Context(), model.RoomID(roomID))
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
-		return
-	}
-	if !ok {
-		ctx.JSON(http.StatusForbidden, gin.H{"error": "room not found"})
-		return
-	}
-
-	ctx.Status(http.StatusOK)
-}
-
-// ParticipateRequestDTO
-type ParticipateRequestDTO struct {
-	Text string `json:"text"`
-}
-
-// @Summary Участие в комнате
-// @Tags Rooms opertaions
-// @Description Позволяет пользователю присоединиться к голосованию с указнием пожеланий
-// @Accept json
-// @Produce json
-// @Param room_id path string true "Идентификатор комнаты" example("123456")
-// @Param request body ParticipateRequestDTO true "Предпочтения пользователя"
-// @Success 202 "Участник добавлен в пул голосующих"
-// @Failure 400 {object} http_common.ErrorResponse "Некорректный формат тела запроса"
-// @Failure 500 {object} http_common.ErrorResponse "Внутренняя ошибка сервера"
-// @Router /rooms/{room_id}/participation [post]
-func (c *Controller) participate(ctx *gin.Context) {
-	roomID := ctx.Param("room_id")
-
-	var req ParticipateRequestDTO
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "incorrect request"})
-		return
-	}
-	err := c.uc.Participate(ctx.Request.Context(), model.RoomID(roomID), model.Preference{
-		Text: req.Text,
+	ctx.Header("X-user-token", ownerToken)
+	ctx.JSON(http.StatusCreated, BookResponseDTO{
+		RoomCode: roomCode,
 	})
+}
+
+type StatusResponseDTO struct {
+	Status string `json:"status"`
+}
+
+// Status возвращает статус комнаты
+// @Summary Получение статуса комнаты
+// @Description Возвращает текущий статус комнаты
+// @Tags Rooms
+// @Param code path string true "Код комнаты"
+// @Success 200 {object} StatusResponseDTO "Статус комнаты"
+// @Failure 404 {object} ErrorResponseDTO "Комната не найдена"
+// @Failure 500 {object} ErrorResponseDTO "Внутренняя ошибка сервера"
+// @Router /rooms/{code}/status [get]
+func (c *Controller) status(ctx *gin.Context) {
+	code := ctx.Param("room_id")
+
+	status, err := c.usecase.Status(ctx, code)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		c.logger.Error("failed to get status", slog.String("error", err.Error()))
+		if errors.Is(err, usecase_room.ErrResourceNotFound) {
+			ctx.JSON(http.StatusNotFound, http_common.ErrorResponse{
+				Message: "not found",
+			})
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, http_common.ErrorResponse{
+			Message: "internal error",
+		})
 		return
 	}
 
-	ctx.Status(http.StatusAccepted)
+	ctx.JSON(http.StatusOK, StatusResponseDTO{
+		Status: status,
+	})
 }
 
-// @Summary Освобождение комнаты
-// @Description Освобождает ресурсы комнаты и делает её готовй для последующей резервации
-// @Tags Rooms opertaions
-// @Produce json
-// @Param room_id path string true "Идентификатор комнаты" example("123456")
-// @Success 200 "Комната успешно освобождена"
+// Free освобождает комнату
+// @Summary Удаление комнаты
+// @Description Удаляет комнату по коду
+// @Tags Rooms
+// @Param code path string true "Код комнаты"
+// @Success 201 "Комната успешно удалена"
+// @Failure 404 {object} ErrorResponseDTO "Комната не найдена"
+// @Failure 401 {object} http_common.ErrorResponse "Не авторизован"
+// @Failure 500 {object} ErrorResponseDTO "Внутренняя ошибка сервера"
+// @Security UserToken
+// @Router /rooms/{code} [delete]
+func (c *Controller) free(ctx *gin.Context) {
+	code := ctx.Param("room_id")
+
+	userToken := ctx.GetHeader("X-user-token")
+	if userToken == "" {
+		ctx.JSON(http.StatusUnauthorized, http_common.ErrorResponse{
+			Message: "X-user-token not found",
+		})
+		return
+	}
+	isOwner, err := c.usecase.IsOwner(ctx, code, userToken)
+	if err != nil {
+		if errors.Is(err, usecase_room.ErrResourceNotFound) {
+			c.logger.Error("failed to free room", slog.String("error", err.Error()))
+			ctx.JSON(http.StatusNotFound, http_common.ErrorResponse{
+				Message: "not found",
+			})
+			return
+		}
+		c.logger.Error("failed to free room", slog.String("error", err.Error()))
+		ctx.JSON(http.StatusInternalServerError, http_common.ErrorResponse{
+			Message: "internal error",
+		})
+		return
+	}
+
+	if !isOwner {
+		ctx.JSON(http.StatusUnauthorized, http_common.ErrorResponse{
+			Message: "unauthorized",
+		})
+		return
+	}
+
+	err = c.usecase.Free(ctx, code)
+	if err != nil {
+		if errors.Is(err, usecase_room.ErrResourceNotFound) {
+			c.logger.Error("failed to free room", slog.String("error", err.Error()))
+			ctx.JSON(http.StatusNotFound, http_common.ErrorResponse{
+				Message: "not found",
+			})
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, http_common.ErrorResponse{
+			Message: "internal error",
+		})
+		return
+	}
+
+	ctx.Status(http.StatusNoContent)
+}
+
+// ParticipateRequestDTO DTO для участия в комнате
+type ParticipateRequestDTO struct {
+	Preference model.Preference `json:"preference" binding:"required"`
+}
+
+// ParticipateResponseDTO DTO для ответа участия
+type ParticipateResponseDTO struct {
+	UserID  string `json:"user_id"`
+	Message string `json:"message"`
+}
+
+// Participate добавляет участника в комнату
+// @Summary Участие в комнате
+// @Description Добавляет участника с предпочтениями в комнату
+// @Tags Rooms
+// @Accept json
+// @Param room_id path string true "Код комнаты"
+// @Param request body ParticipateRequestDTO true "Данные участника"
+// @Success 201 {object} ParticipateResponseDTO "Участник успешно добавлен"
+// @Header 201 {string} X-user-token "Токен пользователя"
+// @Failure 404 {object} http_common.ErrorResponse "Комната не найдена"
 // @Failure 500 {object} http_common.ErrorResponse "Внутренняя ошибка сервера"
-// @Router /rooms/{room_id} [delete]
-func (c *Controller) release(ctx *gin.Context) {
-	roomID := ctx.Param("room_id")
-	if err := c.uc.ReleaseRoom(ctx, model.RoomID(roomID)); err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+// @Router /rooms/{room_id}/participate [post]
+func (c *Controller) participate(ctx *gin.Context) {
+	code := ctx.Param("room_id")
+	var req ParticipateRequestDTO
+
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, http_common.ErrorResponse{
+			Message: "invalid request format",
+		})
 		return
 	}
 
-	ctx.Status(http.StatusOK)
-}
-
-func (c *Controller) roomWS(ctx *gin.Context) {
-	roomID := ctx.Param("room_id")
-
-	ok, err := c.uc.IsRoomAcquired(ctx.Request.Context(), model.RoomID(roomID))
-	if err != nil || !ok {
-		ctx.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
-		return
+	userToken := ctx.GetHeader("X-user-token")
+	var userIDPtr *string
+	if userToken != "" {
+		userIDPtr = &userToken
 	}
 
-	conn, err := upgrader.Upgrade(ctx.Writer, ctx.Request, nil)
+	returnedUserID, err := c.usecase.Participate(ctx, code, req.Preference, userIDPtr)
 	if err != nil {
-		c.logger.Error("failed to upgrade to websocket",
-			slog.String("error", err.Error()),
-		)
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		if errors.Is(err, usecase_room.ErrResourceNotFound) {
+			c.logger.Error("failed to participate in room", slog.String("error", err.Error()))
+			ctx.JSON(http.StatusNotFound, http_common.ErrorResponse{
+				Message: "not found",
+			})
+			return
+		}
+		c.logger.Error("failed to participate in room", slog.String("error", err.Error()))
+		ctx.JSON(http.StatusInternalServerError, http_common.ErrorResponse{
+			Message: "internal error",
+		})
 		return
 	}
 
-	client := &ws_room.Client{
-		Hub:    c.hub,
-		Conn:   conn,
-		Send:   make(chan []byte, 256),
-		RoomID: model.RoomID(roomID),
+	if userToken == "" {
+		ctx.Header("X-user-token", returnedUserID)
 	}
 
-	c.hub.RegisterClient(client)
-
-	go c.hub.StartClientReading(client)
-	go c.hub.StartClientWriting(client)
+	ctx.Status(http.StatusCreated)
 }

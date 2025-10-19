@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KinoSwap Test Client</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        
+        .panel {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .panel h2 {
+            color: #333;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #555;
+        }
+        
+        input, textarea {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        
+        input:focus, textarea:focus {
+            border-color: #667eea;
+            outline: none;
+        }
+        
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: background 0.3s;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+        
+        button:hover {
+            background: #5a6fd8;
+        }
+        
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .status {
+            margin-top: 15px;
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        
+        .logs {
+            background: #1a1a1a;
+            color: #00ff00;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            height: 400px;
+            overflow-y: auto;
+            margin-top: 15px;
+        }
+        
+        .user-info {
+            background: #e8f4fd;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 15px;
+            font-size: 14px;
+        }
+        
+        .ws-status {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 5px;
+        }
+        
+        .ws-connected {
+            background: #28a745;
+        }
+        
+        .ws-disconnected {
+            background: #dc3545;
+        }
+        
+        .tab {
+            display: none;
+        }
+        
+        .tab.active {
+            display: block;
+        }
+        
+        .tab-buttons {
+            display: flex;
+            margin-bottom: 15px;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        .tab-button {
+            flex: 1;
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            padding: 10px;
+            cursor: pointer;
+            text-align: center;
+            border-bottom: none;
+        }
+        
+        .tab-button.active {
+            background: #667eea;
+            color: white;
+        }
+        
+        .step {
+            margin-bottom: 20px;
+            padding: 15px;
+            border: 1px solid #e9ecef;
+            border-radius: 5px;
+        }
+        
+        .step h3 {
+            color: #495057;
+            margin-bottom: 10px;
+        }
+        
+        .json-example {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Левая панель - Управление -->
+        <div class="panel">
+            <h2>🎬 KinoSwap Test Client</h2>
+            
+            <div class="tab-buttons">
+                <div class="tab-button active" onclick="showTab('owner')">Владелец</div>
+                <div class="tab-button" onclick="showTab('participant')">Участник</div>
+            </div>
+            
+            <!-- Вкладка Владельца -->
+            <div id="owner-tab" class="tab active">
+                <div class="step">
+                    <h3>Шаг 1: Создать комнату</h3>
+                    <button onclick="createRoom()">POST /rooms</button>
+                </div>
+                
+                <div id="owner-info" class="user-info" style="display: none;">
+                    <strong>Room Code:</strong> <span id="room-code" style="font-weight: bold; color: #667eea;"></span><br>
+                    <strong>Owner Token:</strong> <span id="owner-token" style="font-family: monospace;"></span>
+                </div>
+                
+                <div class="step">
+                    <h3>Шаг 2: Участвовать как владелец</h3>
+                    <div class="form-group">
+                        <label>JSON Body для preference:</label>
+                        <textarea id="owner-prefs" rows="4" placeholder='{"text": "action, sci-fi, adventure"}'></textarea>
+                        <div class="json-example">
+                            Примеры:<br>
+                            {"text": "action, sci-fi"}<br>
+                            {"genres": ["action", "sci-fi"], "mood": "exciting"}<br>
+                            "просто строка"<br>
+                            ["action", "comedy", "drama"]
+                        </div>
+                    </div>
+                    <button onclick="ownerParticipate()" id="owner-participate-btn" disabled>POST /rooms/{code}/participations</button>
+                </div>
+                
+                <div class="step">
+                    <h3>Шаг 3: WebSocket подключение</h3>
+                    <button onclick="connectOwnerWS()" id="owner-ws-btn" disabled>
+                        <span class="ws-status ws-disconnected"></span>
+                        GET /ws/rooms/{code}
+                    </button>
+                </div>
+                
+                <div class="step">
+                    <h3>Шаг 4: Запуск голосования</h3>
+                    <button onclick="startVoting()" id="start-voting-btn" disabled>Отправить START_VOTING</button>
+                </div>
+                
+                <div class="step">
+                    <h3>Управление комнатой</h3>
+                    <button onclick="getRoomStatus()" id="status-btn">GET /rooms/{code}/status</button>
+                    <button onclick="deleteRoom()" id="delete-btn" disabled>DELETE /rooms/{code}</button>
+                </div>
+            </div>
+            
+            <!-- Вкладка Участника -->
+            <div id="participant-tab" class="tab">
+                <div class="step">
+                    <h3>Шаг 1: Присоединиться к комнате</h3>
+                    <div class="form-group">
+                        <label>Код комнаты:</label>
+                        <input type="text" id="participant-room-code" placeholder="123456">
+                    </div>
+                    <div class="form-group">
+                        <label>JSON Body для preference:</label>
+                        <textarea id="participant-prefs" rows="4" placeholder='{"text": "comedy, drama, romance"}'></textarea>
+                        <div class="json-example">
+                            Примеры:<br>
+                            {"text": "comedy, drama"}<br>
+                            {"genres": ["comedy", "romance"], "mood": "relaxing"}<br>
+                            "просто строка"<br>
+                            ["comedy", "drama", "romance"]
+                        </div>
+                    </div>
+                    <button onclick="participantJoin()">POST /rooms/{code}/participations</button>
+                </div>
+                
+                <div id="participant-info" class="user-info" style="display: none;">
+                    <strong>Participant Token:</strong> <span id="participant-token" style="font-family: monospace;"></span>
+                </div>
+                
+                <div class="step">
+                    <h3>Шаг 2: WebSocket подключение</h3>
+                    <button onclick="connectParticipantWS()" id="participant-ws-btn" disabled>
+                        <span class="ws-status ws-disconnected"></span>
+                        GET /ws/rooms/{code}
+                    </button>
+                </div>
+            </div>
+            
+            <div id="status"></div>
+        </div>
+        
+        <!-- Правая панель - Логи -->
+        <div class="panel">
+            <h2>📋 Логи событий</h2>
+            <div class="logs" id="logs"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8080/api/v1';
+        let ownerToken = '';
+        let participantToken = '';
+        let roomCode = '';
+        let ownerWs = null;
+        let participantWs = null;
+        
+        function showTab(tabName) {
+            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+            
+            document.getElementById(`${tabName}-tab`).classList.add('active');
+            document.querySelector(`.tab-button:nth-child(${tabName === 'owner' ? 1 : 2})`).classList.add('active');
+        }
+        
+        function log(message, type = 'info') {
+            const logs = document.getElementById('logs');
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.innerHTML = `<strong>[${timestamp}]</strong> ${message}`;
+            logEntry.style.color = type === 'error' ? '#ff6b6b' : type === 'success' ? '#51cf66' : '#339af0';
+            logs.appendChild(logEntry);
+            logs.scrollTop = logs.scrollHeight;
+        }
+        
+        function showStatus(message, type = 'info') {
+            const status = document.getElementById('status');
+            status.innerHTML = message;
+            status.className = `status ${type}`;
+        }
+        
+        // Владелец: Создание комнаты
+        async function createRoom() {
+            try {
+                log('📤 POST /rooms - Создание комнаты...');
+                const response = await fetch(`${API_BASE}/rooms`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${errorText}`);
+                }
+                
+                const data = await response.json();
+                roomCode = data.room_code;
+                ownerToken = response.headers.get('X-user-token');
+                
+                document.getElementById('room-code').textContent = roomCode;
+                document.getElementById('owner-token').textContent = ownerToken;
+                document.getElementById('owner-info').style.display = 'block';
+                document.getElementById('owner-participate-btn').disabled = false;
+                document.getElementById('participant-room-code').value = roomCode;
+                document.getElementById('delete-btn').disabled = false;
+                document.getElementById('status-btn').disabled = false;
+                
+                log(`✅ Комната создана! Room Code: ${roomCode}`, 'success');
+                log(`🔑 Owner Token: ${ownerToken}`, 'success');
+                showStatus(`Комната создана! Код: ${roomCode}`, 'success');
+                
+            } catch (error) {
+                log(`❌ Ошибка создания комнаты: ${error.message}`, 'error');
+                showStatus(`Ошибка: ${error.message}`, 'error');
+            }
+        }
+        
+        // Владелец: Участие в своей комнате
+        async function ownerParticipate() {
+            if (!roomCode || !ownerToken) return;
+            
+            try {
+                const prefsText = document.getElementById('owner-prefs').value.trim();
+                let preference;
+                
+                // Парсим JSON или используем как строку
+                if (prefsText) {
+                    try {
+                        preference = JSON.parse(prefsText);
+                    } catch (e) {
+                        // Если не JSON, используем как строку
+                        preference = prefsText;
+                    }
+                } else {
+                    preference = {"text": "action, sci-fi, adventure"};
+                }
+                
+                const requestBody = { preference: preference };
+                
+                log(`📤 POST /rooms/${roomCode}/participations - Владелец присоединяется...`);
+                log(`📦 Request Body: ${JSON.stringify(requestBody)}`, 'info');
+                
+                const response = await fetch(`${API_BASE}/rooms/${roomCode}/participations`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-user-token': ownerToken
+                    },
+                    body: JSON.stringify(requestBody)
+                });
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${errorText}`);
+                }
+                
+                document.getElementById('owner-ws-btn').disabled = false;
+                
+                log('✅ Владелец успешно присоединился к комнате', 'success');
+                showStatus('Владелец присоединился к комнате', 'success');
+                
+            } catch (error) {
+                log(`❌ Ошибка присоединения владельца: ${error.message}`, 'error');
+                showStatus(`Ошибка: ${error.message}`, 'error');
+            }
+        }
+        
+        // Участник: Присоединение к комнате
+        async function participantJoin() {
+            const partRoomCode = document.getElementById('participant-room-code').value;
+            if (!partRoomCode) {
+                showStatus('Введите код комнаты', 'error');
+                return;
+            }
+            
+            try {
+                const prefsText = document.getElementById('participant-prefs').value.trim();
+                let preference;
+                
+                // Парсим JSON или используем как строку
+                if (prefsText) {
+                    try {
+                        preference = JSON.parse(prefsText);
+                    } catch (e) {
+                        // Если не JSON, используем как строку
+                        preference = prefsText;
+                    }
+                } else {
+                    preference = {"text": "comedy, drama, romance"};
+                }
+                
+                const requestBody = { preference: preference };
+                
+                log(`📤 POST /rooms/${partRoomCode}/participations - Участник присоединяется...`);
+                log(`📦 Request Body: ${JSON.stringify(requestBody)}`, 'info');
+                
+                const response = await fetch(`${API_BASE}/rooms/${partRoomCode}/participations`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(requestBody)
+                });
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${errorText}`);
+                }
+                
+                participantToken = response.headers.get('X-user-token');
+                
+                document.getElementById('participant-token').textContent = participantToken;
+                document.getElementById('participant-info').style.display = 'block';
+                document.getElementById('participant-ws-btn').disabled = false;
+                
+                log(`✅ Участник успешно присоединился. Token: ${participantToken}`, 'success');
+                showStatus('Участник присоединился к комнате', 'success');
+                
+            } catch (error) {
+                log(`❌ Ошибка присоединения участника: ${error.message}`, 'error');
+                showStatus(`Ошибка: ${error.message}`, 'error');
+            }
+        }
+        
+        // WebSocket подключение владельца
+        function connectOwnerWS() {
+            if (!roomCode || !ownerToken) return;
+            
+            try {
+                // Передаем токен в query параметре
+                ownerWs = new WebSocket(`ws://localhost:8080/api/v1/ws/rooms/${roomCode}?token=${encodeURIComponent(ownerToken)}`);
+                
+                ownerWs.onopen = () => {
+                    log('🔌 WebSocket владельца подключен', 'success');
+                    document.querySelector('#owner-ws-btn .ws-status').className = 'ws-status ws-connected';
+                    document.getElementById('start-voting-btn').disabled = false;
+                };
+                
+                ownerWs.onmessage = (event) => {
+                    const data = JSON.parse(event.data);
+                    log(`📨 Владелец получил: ${JSON.stringify(data)}`, 'info');
+                    
+                    if (data.type === 'LOBBY_UPDATE') {
+                        showStatus(`Участников в комнате: ${data.payload.participants_count}`, 'info');
+                    }
+                    
+                    if (data.type === 'REDIRECT_TO_VOTING') {
+                        log('🚀 REDIRECT_TO_VOTING получен! Переход на страницу голосования...', 'success');
+                        // Редирект владельца тоже
+                        setTimeout(() => {
+                            window.location.href = `/voting.html?room=${data.payload.room_code}`;
+                        }, 1000);
+                    }
+                };
+                
+                ownerWs.onclose = () => {
+                    log('🔌 WebSocket владельца отключен', 'error');
+                    document.querySelector('#owner-ws-btn .ws-status').className = 'ws-status ws-disconnected';
+                    document.getElementById('start-voting-btn').disabled = true;
+                };
+                
+                ownerWs.onerror = (error) => {
+                    log(`❌ WebSocket ошибка владельца: ${error}`, 'error');
+                };
+                
+            } catch (error) {
+                log(`❌ Ошибка WebSocket владельца: ${error.message}`, 'error');
+            }
+        }
+
+        // WebSocket подключение участника  
+        function connectParticipantWS() {
+            const partRoomCode = document.getElementById('participant-room-code').value;
+            if (!partRoomCode || !participantToken) return;
+            
+            try {
+                // Передаем токен в query параметре
+                participantWs = new WebSocket(`ws://localhost:8080/api/v1/ws/rooms/${partRoomCode}?token=${encodeURIComponent(participantToken)}`);
+                
+                participantWs.onopen = () => {
+                    log('🔌 WebSocket участника подключен', 'success');
+                    document.querySelector('#participant-ws-btn .ws-status').className = 'ws-status ws-connected';
+                };
+                
+                participantWs.onmessage = (event) => {
+                    const data = JSON.parse(event.data);
+                    log(`📨 Участник получил: ${JSON.stringify(data)}`, 'info');
+                    
+                    if (data.type === 'LOBBY_UPDATE') {
+                        showStatus(`Участников в комнате: ${data.payload.participants_count}`, 'info');
+                    }
+                    
+                    if (data.type === 'REDIRECT_TO_VOTING') {
+                        log('🚀 REDIRECT_TO_VOTING получен! Переход на голосование!', 'success');
+                        showStatus('Начинается голосование!', 'success');
+                        // Редирект участника
+                        // Редирект участника
+                        setTimeout(() => {
+                            window.location.href = `/voting.html?room=${data.payload.room_code}`;
+                        }, 1000);
+                    }
+                };
+                
+                participantWs.onclose = () => {
+                    log('🔌 WebSocket участника отключен', 'error');
+                    document.querySelector('#participant-ws-btn .ws-status').className = 'ws-status ws-disconnected';
+                };
+                
+                participantWs.onerror = (error) => {
+                    log(`❌ WebSocket ошибка участника: ${error}`, 'error');
+                };
+                
+            } catch (error) {
+                log(`❌ Ошибка WebSocket участника: ${error.message}`, 'error');
+            }
+        }
+        
+        // Запуск голосования
+        function startVoting() {
+            if (!ownerWs || ownerWs.readyState !== WebSocket.OPEN) {
+                log('❌ WebSocket владельца не подключен', 'error');
+                return;
+            }
+            
+            ownerWs.send(JSON.stringify({
+                type: 'START_VOTING'
+            }));
+            
+            log('🎬 Владелец запускает голосование...', 'success');
+        }
+        
+        // Получение статуса комнаты
+        async function getRoomStatus() {
+            if (!roomCode) return;
+            
+            try {
+                log(`📤 GET /rooms/${roomCode}/status - Получение статуса...`);
+                const response = await fetch(`${API_BASE}/rooms/${roomCode}/status`);
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${errorText}`);
+                }
+                
+                const data = await response.json();
+                log(`✅ Статус комнаты: ${data.status}`, 'success');
+                showStatus(`Статус: ${data.status}`, 'success');
+                
+            } catch (error) {
+                log(`❌ Ошибка получения статуса: ${error.message}`, 'error');
+            }
+        }
+        
+        // Удаление комнаты
+        async function deleteRoom() {
+            if (!roomCode || !ownerToken) return;
+            
+            try {
+                log(`📤 DELETE /rooms/${roomCode} - Удаление комнаты...`);
+                const response = await fetch(`${API_BASE}/rooms/${roomCode}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'X-user-token': ownerToken
+                    }
+                });
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${errorText}`);
+                }
+                
+                log('✅ Комната успешно удалена', 'success');
+                showStatus('Комната удалена', 'success');
+                
+                // Сброс состояния
+                resetOwnerState();
+                
+            } catch (error) {
+                log(`❌ Ошибка удаления комнаты: ${error.message}`, 'error');
+            }
+        }
+        
+        function resetOwnerState() {
+            ownerToken = '';
+            roomCode = '';
+            document.getElementById('owner-info').style.display = 'none';
+            document.getElementById('owner-participate-btn').disabled = true;
+            document.getElementById('owner-ws-btn').disabled = true;
+            document.getElementById('start-voting-btn').disabled = true;
+            document.getElementById('delete-btn').disabled = true;
+        }
+        
+        // Автозаполнение примеров
+        document.getElementById('owner-prefs').value = '{"text": "action, sci-fi, adventure - люблю динамичные фильмы с спецэффектами"}';
+        document.getElementById('participant-prefs').value = '{"text": "comedy, drama, romance - предпочитаю легкие и романтические фильмы"}';
+    </script>
+</body>
+</html>

@@ -3,150 +3,89 @@ package usecase_room
 import (
 	"context"
 	"errors"
-	"fmt"
 	"math/rand"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/humanbelnik/kinoswap/core/internal/model"
 )
 
 var (
-	ErrCreateRoom             = errors.New("failed to create new room")
-	ErrParticipate            = errors.New("failed to participate")
-	ErrEnterRoom              = errors.New("failed to enter room")
-	ErrBuildEmbedding         = errors.New("failed to create embedding")
-	ErrFailedToStoreEmbedding = errors.New("failed to store embedding")
-	ErrReleaseRoom            = errors.New("failed to release room")
-	ErrAddToCache             = errors.New("failed to add roomID to a cache")
+	ErrCodeConflict     = errors.New("code conflict")
+	ErrRoomsUnavailable = errors.New("no available rooms")
+	ErrInternal         = errors.New("internal error")
+	ErrResourceNotFound = errors.New("no such resource")
 )
 
+//go:generate mockery --name=RoomRepository --output=./mocks/room/repository --filename=repository.go
 type RoomRepository interface {
-	CreateAndAquire(ctx context.Context, roomID model.RoomID) error
-	FindAndAcquire(ctx context.Context) (model.RoomID, error)
-	TryAcquire(ctx context.Context, roomID model.RoomID) error
-	IsExistsRoomID(ctx context.Context, roomID model.RoomID) (bool, error)
-	IsRoomAcquired(ctx context.Context, roomID model.RoomID) (bool, error)
-	AppendPreference(ctx context.Context, roomID model.RoomID, preference model.Preference) error
-	ReleaseRoom(ctx context.Context, roomID model.RoomID) error
+	CreateAndBook(ctx context.Context, room model.Room, ownerID uuid.UUID) error
+	IsOwner(ctx context.Context, code string, ownerID uuid.UUID) (bool, error)
+	DeleteByCode(ctx context.Context, code string) error
+	StatusByCode(ctx context.Context, code string) (string, error)
+	SetStatusByCode(ctx context.Context, code string, status string) error
+	AddPreferenceEmbedding(ctx context.Context, code string, userID uuid.UUID, prefEmbedding model.Embedding) error
+	ParticipantsCount(ctx context.Context, code string) (int, error)
 }
 
-type EmptyRoomsIDSet interface {
-	Remove(ctx context.Context) (model.RoomID, error)
-	Add(ctx context.Context, roomID model.RoomID) error
-}
-
+//go:generate mockery --name=Embedder --output=./mocks/room/Embedder --filename=Embedder.go
 type Embedder interface {
 	BuildPreferenceEmbedding(ctx context.Context, p model.Preference) (model.Embedding, error)
 }
 
-type EmbeddingRepository interface {
-	Append(ctx context.Context, roomID model.RoomID, e model.Embedding) error
-}
-
 type Usecase struct {
-	repo       RoomRepository
-	idCahceSet EmptyRoomsIDSet
-
-	embedder         Embedder
-	embeddingStorage EmbeddingRepository
+	RoomRepository RoomRepository
+	Embedder       Embedder
 }
 
-func New(repo RoomRepository, embedder Embedder, embeddingStorage EmbeddingRepository, idCacheSet EmptyRoomsIDSet) *Usecase {
+func New(
+	RoomRepository RoomRepository,
+	Embedder Embedder,
+) *Usecase {
 	return &Usecase{
-		repo:             repo,
-		embedder:         embedder,
-		embeddingStorage: embeddingStorage,
-		idCahceSet:       idCacheSet,
+		RoomRepository: RoomRepository,
+		Embedder:       Embedder,
 	}
 }
 
-func (u *Usecase) AcquireRoom(ctx context.Context) (model.RoomID, error) {
-	roomID, _ := u.idCahceSet.Remove(ctx)
-	if roomID != model.EmptyRoomID {
-		// Fast path
-		if err := u.repo.TryAcquire(ctx, roomID); err == nil {
-			return roomID, nil
-		}
-	}
-	// Slower path
-	roomID, _ = u.repo.FindAndAcquire(ctx)
-	if roomID != model.EmptyRoomID {
-		return roomID, nil
-	}
-
-	// Slowest path
-	roomID, err := u.resolveRoomID(ctx)
+// Owner token must be set on a client in order to be able to do 'owner ops'
+func (u *Usecase) Book(ctx context.Context) (roomCode string, ownerToken string, err error) {
+	ownerID := u.resolveOwnerToken()
+	roomCode, err = u.createRoomLobby(ctx, ownerID)
 	if err != nil {
-		return model.EmptyRoomID, err
+		return "", "", err
 	}
-
-	err = u.repo.CreateAndAquire(ctx, roomID)
-	if err != nil {
-		err = fmt.Errorf("%w : %w", ErrCreateRoom, err)
-	}
-	return roomID, err
+	return roomCode, ownerID.String(), nil
 }
 
-func (u *Usecase) ReleaseRoom(ctx context.Context, roomID model.RoomID) error {
-	if err := u.repo.ReleaseRoom(ctx, roomID); err != nil {
-		return fmt.Errorf("%w : %w", ErrReleaseRoom, err)
-	}
-
-	// Not critical
-	if err := u.idCahceSet.Add(ctx, roomID); err != nil {
-		return fmt.Errorf("%w : %w", ErrAddToCache, err)
-	}
-	return nil
-}
-
-func (u *Usecase) Participate(ctx context.Context, roomID model.RoomID, p model.Preference) error {
-	if err := u.repo.AppendPreference(ctx, roomID, p); err != nil {
-		return fmt.Errorf("%w:%w", ErrParticipate, err)
-	}
-
-	go func() {
-		/*
-			Don't use parent HTTP context on async tasks.
-			Parent context cancels when response is made.
-		*/
-		ctx := context.Background()
-		e, err := u.embedder.BuildPreferenceEmbedding(ctx, p)
-		if err != nil {
-			//! Logging here
-			return
-		}
-		if err := u.embeddingStorage.Append(ctx, roomID, e); err != nil {
-			//! Logging here
-			return
-		}
-	}()
-
-	return nil
-}
-
-func (u *Usecase) IsRoomAcquired(ctx context.Context, roomID model.RoomID) (bool, error) {
-	if ok, err := u.repo.IsRoomAcquired(ctx, roomID); !ok || err != nil {
-		return false, err
-	}
-	return true, nil
-}
-
-func (u *Usecase) resolveRoomID(ctx context.Context) (model.RoomID, error) {
-	var roomID model.RoomID
-	for {
-		roomID = u.buildRoomID()
-		exists, err := u.repo.IsExistsRoomID(ctx, roomID)
-		if err != nil {
-			return model.EmptyRoomID, err
-		}
-		if !exists {
-			break
+// Assuming that codes can conflict.
+// Retrying...
+func (u *Usecase) createRoomLobby(ctx context.Context, ownerID uuid.UUID) (string, error) {
+	var retries = 3
+	for retries > 0 {
+		code := u.buildRoomCode()
+		if err := u.RoomRepository.CreateAndBook(ctx, model.Room{
+			ID:         uuid.New(),
+			PublicCode: code,
+			Status:     model.StatusLobby,
+		}, ownerID); err != nil {
+			if errors.Is(err, ErrCodeConflict) {
+				retries--
+			} else {
+				return "", errors.Join(ErrInternal, err)
+			}
+		} else {
+			return code, nil
 		}
 	}
-	return roomID, nil
+	return "", ErrRoomsUnavailable
 }
 
-func (u *Usecase) buildRoomID() model.RoomID {
+func (u *Usecase) resolveOwnerToken() uuid.UUID {
+	return uuid.New()
+}
+
+func (u *Usecase) buildRoomCode() string {
 	const codeLen = 6
 	var builder strings.Builder
 	builder.Grow(codeLen)
@@ -155,5 +94,93 @@ func (u *Usecase) buildRoomID() model.RoomID {
 		builder.WriteByte(byte(rand.Intn(10)) + '0')
 	}
 
-	return model.RoomID(builder.String())
+	return builder.String()
+}
+
+func (u *Usecase) IsOwner(ctx context.Context, code string, ownerID string) (bool, error) {
+	ownerUUID, err := uuid.Parse(ownerID)
+	if err != nil {
+		return false, errors.Join(ErrInternal, err)
+	}
+
+	isOwner, err := u.RoomRepository.IsOwner(ctx, code, ownerUUID)
+	if err != nil {
+		if errors.Is(err, ErrResourceNotFound) {
+			return false, ErrResourceNotFound
+		}
+		return false, errors.Join(ErrInternal, err)
+	}
+
+	return isOwner, nil
+}
+
+func (u *Usecase) Free(ctx context.Context, code string) error {
+	if err := u.RoomRepository.DeleteByCode(ctx, code); err != nil {
+		if errors.Is(err, ErrResourceNotFound) {
+			return ErrResourceNotFound
+		}
+		return errors.Join(ErrInternal, err)
+	}
+	return nil
+}
+
+func (u *Usecase) Status(ctx context.Context, code string) (string, error) {
+	status, err := u.RoomRepository.StatusByCode(ctx, code)
+	if err != nil {
+		if errors.Is(err, ErrResourceNotFound) {
+			return "", ErrResourceNotFound
+		}
+		return "", errors.Join(ErrInternal, err)
+	}
+	return status, nil
+}
+
+func (u *Usecase) SetStatus(ctx context.Context, code string, status string) error {
+	err := u.RoomRepository.SetStatusByCode(ctx, code, status)
+	if err != nil {
+		if errors.Is(err, ErrResourceNotFound) {
+			return ErrResourceNotFound
+		}
+		return errors.Join(ErrInternal, err)
+	}
+	return nil
+}
+
+// Incomping userID == nil ~ it's not owner
+func (u *Usecase) Participate(ctx context.Context, code string, pref model.Preference, userID *string) (string, error) {
+	var userUUID uuid.UUID
+	if userID == nil {
+		userUUID = u.resolveOwnerToken()
+		userID = func(userUUID uuid.UUID) *string {
+			str := userUUID.String()
+			return &str
+		}(userUUID)
+	} else {
+		userUUID, _ = uuid.Parse(*userID)
+	}
+
+	prefEmbedding, err := u.Embedder.BuildPreferenceEmbedding(ctx, pref)
+	if err != nil {
+		return *userID, errors.Join(ErrInternal, err)
+	}
+
+	if err := u.RoomRepository.AddPreferenceEmbedding(ctx, code, userUUID, prefEmbedding); err != nil {
+		if errors.Is(err, ErrResourceNotFound) {
+			return *userID, ErrResourceNotFound
+		}
+		return *userID, errors.Join(ErrInternal, err)
+	}
+
+	return *userID, nil
+}
+
+func (u *Usecase) ParticipantsCount(ctx context.Context, code string) (int, error) {
+	count, err := u.RoomRepository.ParticipantsCount(ctx, code)
+	if err != nil {
+		if errors.Is(err, ErrResourceNotFound) {
+			return 0, ErrResourceNotFound
+		}
+		return 0, errors.Join(ErrInternal, err)
+	}
+	return count, nil
 }
