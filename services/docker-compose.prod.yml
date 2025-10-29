@@ -1,0 +1,103 @@
+services:
+  core-app:
+    build:
+      context: ./core
+      dockerfile: Dockerfile.app
+    container_name: app-core-service
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    depends_on:
+      core-migrate:
+        condition: service_completed_successfully
+      core-redis:
+        condition: service_healthy
+      core-postgres:
+        condition: service_healthy
+      # embedder-app:
+      #   condition: service_healthy
+    networks:
+      - core-network
+    restart: unless-stopped
+
+
+  core-postgres:
+    image: pgvector/pgvector:pg16
+    container_name: postgres-core-service
+    env_file:
+      - .env
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./migration:/migration
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+    networks:
+      - core-network
+
+  core-migrate:
+    image: migrate/migrate
+    depends_on:
+      core-postgres:
+        condition: service_healthy
+    env_file:
+      - .env
+    volumes:
+      - ./core/migration:/migration
+    command:
+      - "-path=/migration"
+      - "-database=postgres://${DB_USER}:${DB_PASSWORD}@core-postgres:5432/${DB_NAME}?sslmode=disable"
+      - "up"
+    networks:
+      - core-network
+
+  core-redis:
+    image: redis:7.2-alpine
+    container_name: redis-core-service
+    env_file:
+      - .env
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT}:6379"
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}"]
+    volumes:
+      - ./redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "--pass", "${REDIS_PASSWORD}", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    networks:
+      - core-network
+
+  # embedder-app:
+  #   build:
+  #     context: ./embedder
+  #     dockerfile: Dockerfile.app
+  #   container_name: embedder-app
+  #   ports:
+  #     - "50051:50051"
+
+    # healthcheck:
+    #   test: ["CMD", "python", "-c", "import grpc; grpc.insecure_channel('localhost:50051')"]
+    #   interval: 30s
+    #   timeout: 10s
+    #   retries: 3
+    #   start_period: 40s
+    # networks:
+    #   - core-network
+    # restart: unless-stopped
+
+networks:
+  core-network:
+    driver: bridge
+    

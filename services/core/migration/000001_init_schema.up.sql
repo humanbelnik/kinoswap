@@ -13,14 +13,8 @@ CREATE TABLE IF NOT EXISTS rooms (
 CREATE TABLE IF NOT EXISTS participants (
     id UUID PRIMARY KEY NOT NULL,
     room_id UUID NOT NULL REFERENCES rooms(id) ON DELETE CASCADE, 
+    voted BOOL DEFAULT false,
     preference VECTOR(384)
-);
-
-CREATE TABLE IF NOT EXISTS reactions (
-    id UUID PRIMARY KEY NOT NULL,
-    room_id UUID NOT NULL REFERENCES rooms(id) ON DELETE CASCADE, 
-    movie_id UUID NOT NULL REFERENCES movies(id) ON DELETE CASCADE,
-    likes INT DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS movies (
@@ -34,3 +28,10 @@ CREATE TABLE IF NOT EXISTS movies (
     movie_vector VECTOR(384)
 );
 
+CREATE TABLE IF NOT EXISTS reactions (
+    id UUID PRIMARY KEY NOT NULL,
+    room_id UUID NOT NULL REFERENCES rooms(id) ON DELETE CASCADE, 
+    movie_id UUID NOT NULL REFERENCES movies(id) ON DELETE CASCADE,
+    likes INT DEFAULT 0,
+    UNIQUE (room_id, movie_id)
+);

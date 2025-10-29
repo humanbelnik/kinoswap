@@ -1,5 +1,7 @@
 package model
 
+import "github.com/google/uuid"
+
 type Preference struct {
 	Text string
 }
@@ -11,7 +13,7 @@ const (
 )
 
 type Reactions struct {
-	Reactions map[*MovieMeta]Reaction
+	Reactions map[uuid.UUID]Reaction
 }
 
 type Result struct {

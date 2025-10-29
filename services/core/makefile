@@ -4,6 +4,9 @@ mock-usecase-deps: mock-vote-usecase-deps mock-room-usecase-deps mock-movie-usec
 usecase-mocks:
 	go generate ./...
 
+build-run:
+	docker-compose -f docker-compose.prod.yml up --build
+
 run-storages:
 	docker-compose up --build migrate redis
 

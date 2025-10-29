@@ -8,11 +8,13 @@ import (
 	http_movie "github.com/humanbelnik/kinoswap/core/internal/delivery/http/movie"
 	http_room "github.com/humanbelnik/kinoswap/core/internal/delivery/http/room"
 	http_swagger "github.com/humanbelnik/kinoswap/core/internal/delivery/http/swagger"
+	http_vote "github.com/humanbelnik/kinoswap/core/internal/delivery/http/voting"
 	ws_room "github.com/humanbelnik/kinoswap/core/internal/delivery/ws/room"
 	infra_embedder "github.com/humanbelnik/kinoswap/core/internal/infra/embedder"
 	infra_pg_init "github.com/humanbelnik/kinoswap/core/internal/infra/postgres/init"
 	infra_postgres_movie "github.com/humanbelnik/kinoswap/core/internal/infra/postgres/movie"
 	infra_postgres_room "github.com/humanbelnik/kinoswap/core/internal/infra/postgres/room"
+	infra_postgres_vote "github.com/humanbelnik/kinoswap/core/internal/infra/postgres/vote"
 	infra_redis_init "github.com/humanbelnik/kinoswap/core/internal/infra/redis/init"
 	infra_session_cache "github.com/humanbelnik/kinoswap/core/internal/infra/redis/session"
 	infra_s3 "github.com/humanbelnik/kinoswap/core/internal/infra/s3"
@@ -20,6 +22,7 @@ import (
 	"github.com/humanbelnik/kinoswap/core/internal/service/embedding_reducer"
 	usecase_movie "github.com/humanbelnik/kinoswap/core/internal/usecase/movie"
 	usecase_room "github.com/humanbelnik/kinoswap/core/internal/usecase/room"
+	usecase_vote "github.com/humanbelnik/kinoswap/core/internal/usecase/vote"
 )
 
 func Go(cfg *config.Config) {
@@ -36,18 +39,15 @@ func Go(cfg *config.Config) {
 
 	embeddingReducer := embedding_reducer.New()
 
-	// roomIDSet := infra_redis_roomid_set.New(redisConn, roomIDSetKey)
-
 	roomRepository := infra_postgres_room.New(pgConn)
-	// voteRepo := infra_postgres_vote.New(pgConn)
+	voteRepo := infra_postgres_vote.New(pgConn)
 	movieRepository := infra_postgres_movie.New(pgConn)
-	// embedderRepo := infra_postgres_embedding.New(pgConn)
 
 	roomUC := usecase_room.New(roomRepository, embedder)
 
 	hub := ws_room.NewHub(roomUC)
 	go hub.Run()
-	// voteUC := usecase_vote.New(voteRepo)
+	voteUC := usecase_vote.New(voteRepo, roomUC)
 	movieUC := usecase_movie.New(movieRepository, posterRepository, embedder, embeddingReducer)
 
 	sessionCache := infra_session_cache.New(redisConn, "session_cache")
@@ -58,6 +58,7 @@ func Go(cfg *config.Config) {
 	controllerPool.Add(http_swagger.New())
 	controllerPool.Add(http_room.New(roomUC))
 	controllerPool.Add(http_movie.New(movieUC, authMiddleware))
+	controllerPool.Add(http_vote.New(voteUC, roomUC, hub))
 	controllerPool.Add(http_auth.New(authService))
 	controllerPool.Add(ws_room.NewController(hub))
 

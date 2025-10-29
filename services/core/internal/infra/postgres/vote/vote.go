@@ -3,11 +3,13 @@ package infra_postgres_vote
 import (
 	"context"
 	"database/sql"
+	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/humanbelnik/kinoswap/core/internal/model"
 	usecase_vote "github.com/humanbelnik/kinoswap/core/internal/usecase/vote"
 	"github.com/jmoiron/sqlx"
+	"github.com/lib/pq"
 	"github.com/pgvector/pgvector-go"
 )
 
@@ -24,27 +26,27 @@ type roomDTO struct {
 }
 
 type movieDTO struct {
-	ID         uuid.UUID `db:"id"`
-	Title      string    `db:"title"`
-	Year       int       `db:"year"`
-	Rating     float64   `db:"rating"`
-	Genres     []string  `db:"genres"`
-	Overview   string    `db:"overview"`
-	PosterLink string    `db:"poster_link"`
+	ID         uuid.UUID      `db:"id"`
+	Title      string         `db:"title"`
+	Year       int            `db:"year"`
+	Rating     float64        `db:"rating"`
+	Genres     pq.StringArray `db:"genres"` // Используем pq.StringArray для сканирования
+	Overview   string         `db:"overview"`
+	PosterLink string         `db:"poster_link"`
 }
 
 type resultDTO struct {
-	MovieID    uuid.UUID `db:"movie_id"`
-	Title      string    `db:"title"`
-	Year       int       `db:"year"`
-	Rating     float64   `db:"rating"`
-	Genres     []string  `db:"genres"`
-	Overview   string    `db:"overview"`
-	PosterLink string    `db:"poster_link"`
-	Likes      int       `db:"likes"`
+	MovieID    uuid.UUID      `db:"movie_id"`
+	Title      string         `db:"title"`
+	Year       int            `db:"year"`
+	Rating     float64        `db:"rating"`
+	Genres     pq.StringArray `db:"genres"` // Используем pq.StringArray для сканирования
+	Overview   string         `db:"overview"`
+	PosterLink string         `db:"poster_link"`
+	Likes      int            `db:"likes"`
 }
 
-func (d *Driver) GetRoomIDByCode(ctx context.Context, code string) (uuid.UUID, error) {
+func (d *Driver) RoomIDByCode(ctx context.Context, code string) (uuid.UUID, error) {
 	var room roomDTO
 
 	query := `SELECT id FROM rooms WHERE code = $1`
@@ -60,7 +62,7 @@ func (d *Driver) GetRoomIDByCode(ctx context.Context, code string) (uuid.UUID, e
 	return room.ID, nil
 }
 
-func (d *Driver) GetParticipantsEmbeddings(ctx context.Context, roomID uuid.UUID) ([]model.Embedding, error) {
+func (d *Driver) ParticipantsEmbeddings(ctx context.Context, roomID uuid.UUID) ([]model.Embedding, error) {
 	var vectors []pgvector.Vector
 
 	query := `
@@ -83,7 +85,8 @@ func (d *Driver) GetParticipantsEmbeddings(ctx context.Context, roomID uuid.UUID
 
 	return embeddings, nil
 }
-func (d *Driver) GetSimilarMovies(ctx context.Context, queryEmbedding []float32, limit int) ([]*model.MovieMeta, error) {
+
+func (d *Driver) SimilarMovies(ctx context.Context, queryEmbedding []float32, limit int) ([]*model.MovieMeta, error) {
 	var movies []movieDTO
 
 	query := `
@@ -106,7 +109,7 @@ func (d *Driver) GetSimilarMovies(ctx context.Context, queryEmbedding []float32,
 			Title:      movie.Title,
 			Year:       movie.Year,
 			Rating:     movie.Rating,
-			Genres:     movie.Genres,
+			Genres:     []string(movie.Genres), // Конвертируем pq.StringArray в []string
 			Overview:   movie.Overview,
 			PosterLink: movie.PosterLink,
 		})
@@ -146,7 +149,7 @@ func (d *Driver) Results(ctx context.Context, roomID uuid.UUID) ([]*model.Result
 			Title:      r.Title,
 			Year:       r.Year,
 			Rating:     r.Rating,
-			Genres:     r.Genres,
+			Genres:     []string(r.Genres), // Конвертируем pq.StringArray в []string
 			Overview:   r.Overview,
 			PosterLink: r.PosterLink,
 		}
@@ -159,31 +162,95 @@ func (d *Driver) Results(ctx context.Context, roomID uuid.UUID) ([]*model.Result
 	return modelResults, nil
 }
 
-func (d *Driver) AddReactions(ctx context.Context, roomID uuid.UUID, reactions map[uuid.UUID]int) error {
+func (d *Driver) AddReactions(ctx context.Context, roomID uuid.UUID, userID uuid.UUID, reactions map[uuid.UUID]int) error {
 	tx, err := d.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
 
-	for movieID, likes := range reactions {
-		if likes <= 0 {
-			continue
+	var voted bool
+	checkParticipantQuery := `
+		SELECT voted 
+		FROM participants 
+		WHERE id = $1 AND room_id = $2
+	`
+
+	err = tx.GetContext(ctx, &voted, checkParticipantQuery, userID, roomID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return usecase_vote.ErrResourceNotFound
 		}
+		return err
+	}
 
-		// Используем UPSERT для добавления или обновления реакций
-		query := `
-			INSERT INTO reactions (id, room_id, movie_id, likes) 
-			VALUES ($1, $2, $3, $4)
-			ON CONFLICT (room_id, movie_id) 
-			DO UPDATE SET likes = reactions.likes + EXCLUDED.likes
-		`
+	if voted {
+		return nil
+	}
 
-		_, err = tx.ExecContext(ctx, query, uuid.New(), roomID, movieID, likes)
-		if err != nil {
-			return err
+	for movieID, reaction := range reactions {
+		if reaction == 1 {
+			upsertQuery := `
+				INSERT INTO reactions (id, room_id, movie_id, likes) 
+				VALUES ($1, $2, $3, $4)
+				ON CONFLICT (room_id, movie_id) 
+				DO UPDATE SET likes = reactions.likes + EXCLUDED.likes
+			`
+
+			_, err = tx.ExecContext(ctx, upsertQuery, uuid.New(), roomID, movieID, 1)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
+	updateVotedQuery := `
+		UPDATE participants 
+		SET voted = true 
+		WHERE id = $1 AND room_id = $2
+	`
+
+	_, err = tx.ExecContext(ctx, updateVotedQuery, userID, roomID)
+	if err != nil {
+		return err
+	}
+
+	updateReadyQuery := `
+		UPDATE rooms 
+		SET ready = ready + 1
+		WHERE id = $1
+	`
+
+	_, err = tx.ExecContext(ctx, updateReadyQuery, roomID)
+	if err != nil {
+		return err
+	}
 	return tx.Commit()
+}
+
+func (d *Driver) IsAllReady(ctx context.Context, roomID uuid.UUID) (bool, error) {
+	var result struct {
+		ReadyCount        int `db:"ready_count"`
+		ParticipantsCount int `db:"participants_count"`
+	}
+
+	query := `
+		SELECT 
+			r.ready as ready_count,
+			COUNT(p.id) as participants_count
+		FROM rooms r
+		LEFT JOIN participants p ON r.id = p.room_id
+		WHERE r.id = $1
+		GROUP BY r.id, r.ready
+	`
+
+	err := d.db.GetContext(ctx, &result, query, roomID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return false, usecase_vote.ErrResourceNotFound
+		}
+		return false, fmt.Errorf("failed to check readiness: %w", err)
+	}
+
+	return result.ReadyCount == result.ParticipantsCount, nil
 }

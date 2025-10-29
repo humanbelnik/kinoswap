@@ -210,3 +210,18 @@ func (d *Driver) IsParticipant(ctx context.Context, code string, userID uuid.UUI
 
 	return exists, nil
 }
+
+func (d *Driver) UUIDByCode(ctx context.Context, code string) (uuid.UUID, error) {
+	var _uuid uuid.UUID
+
+	query := `
+		SELECT id FROM rooms WHERE code = $1
+	`
+	if err := d.db.GetContext(ctx, &_uuid, query, code); err != nil {
+		if err == sql.ErrNoRows {
+			return uuid.Nil, usecase_room.ErrResourceNotFound
+		}
+		return uuid.Nil, err
+	}
+	return _uuid, nil
+}

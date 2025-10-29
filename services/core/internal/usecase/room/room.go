@@ -27,6 +27,7 @@ type RoomRepository interface {
 	AddPreferenceEmbedding(ctx context.Context, code string, userID uuid.UUID, prefEmbedding model.Embedding) error
 	ParticipantsCount(ctx context.Context, code string) (int, error)
 	IsParticipant(ctx context.Context, code string, userID uuid.UUID) (bool, error)
+	UUIDByCode(ctx context.Context, code string) (uuid.UUID, error)
 }
 
 //go:generate mockery --name=Embedder --output=./mocks/room/Embedder --filename=Embedder.go
@@ -201,4 +202,16 @@ func (u *Usecase) ParticipantsCount(ctx context.Context, code string) (int, erro
 		return 0, errors.Join(ErrInternal, err)
 	}
 	return count, nil
+}
+
+func (u *Usecase) UUIDByCode(ctx context.Context, code string) (uuid.UUID, error) {
+	_uuid, err := u.RoomRepository.UUIDByCode(ctx, code)
+	if err != nil {
+		if errors.Is(err, ErrResourceNotFound) {
+			return uuid.Nil, ErrResourceNotFound
+		}
+		return uuid.Nil, errors.Join(err, ErrInternal)
+	}
+
+	return _uuid, err
 }
