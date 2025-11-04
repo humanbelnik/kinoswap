@@ -1,0 +1,26 @@
+websocketEvents:
+  clientToServer:
+    START_VOTING:
+      description: Room owner initiates voting process
+      permissions: owner only
+      payload: {}
+
+    REDIRECT_TO_VOTING:
+      description: Redirect all participants to voting page
+      payload:
+        initiated_by: string
+        room_code: string
+        redirect_url: string
+
+    VOTING_FINISHED:
+      description: Voting completed, redirect to results
+      payload:
+        room_code: string
+        message: string
+        redirect_url: string
+        timestamp: integer
+
+    ERROR:
+      description: Error occurred
+      payload:
+        message: string
