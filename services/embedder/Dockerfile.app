@@ -1,28 +1,45 @@
-FROM python:3.11-slim AS builder
+FROM python:3.11-slim as builder
 
-WORKDIR /app
-
-COPY requirements.txt .
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    git \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
 
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
-RUN pip install --no-cache-dir -r requirements.txt
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
 
 FROM python:3.11-slim
 
-WORKDIR /app
+RUN apt-get update && apt-get install -y \
+    --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
 
 COPY --from=builder /opt/venv /opt/venv
-
-COPY . .
-
 ENV PATH="/opt/venv/bin:$PATH"
-ENV PYTHONPATH="/app"
 
-RUN groupadd -r appuser && useradd -r -g appuser appuser && \
-    chown -R appuser:appuser /app
+RUN groupadd -r appuser && useradd -r -g appuser -m -d /home/appuser appuser
+
+WORKDIR /app
+
+COPY --chown=appuser:appuser *.py ./
+
+RUN mkdir -p /app/model && chown -R appuser:appuser /app
+
+ENV TRANSFORMERS_CACHE=/app/cache
+ENV HUGGINGFACE_HUB_CACHE=/app/cache
+ENV HF_HOME=/app/cache
+ENV MODEL_PATH=/app/model
+
 USER appuser
 
 EXPOSE 50051
 
-CMD ["python", "server.py"]
+VOLUME /app/model
+
+CMD ["python", "main.py"]

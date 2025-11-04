@@ -22,6 +22,7 @@ import (
 
 func MustEstabilishConn() *s3.Client {
 	cfg, err := config.LoadDefaultConfig(context.TODO())
+	fmt.Println("AWS REGION", cfg.Region)
 	if err != nil {
 		log.Fatal(err)
 	}

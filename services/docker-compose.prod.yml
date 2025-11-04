@@ -15,8 +15,10 @@ services:
         condition: service_healthy
       core-postgres:
         condition: service_healthy
-      # embedder-app:
-      #   condition: service_healthy
+      embedder-app:
+        condition: service_healthy
+    volumes:
+      - ~/.aws:/root/.aws
     networks:
       - core-network
     restart: unless-stopped
@@ -34,7 +36,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - ./migration:/migration
+      - ./core/migration:/migration
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
       interval: 1s
@@ -79,23 +81,22 @@ services:
     networks:
       - core-network
 
-  # embedder-app:
-  #   build:
-  #     context: ./embedder
-  #     dockerfile: Dockerfile.app
-  #   container_name: embedder-app
-  #   ports:
-  #     - "50051:50051"
-
-    # healthcheck:
-    #   test: ["CMD", "python", "-c", "import grpc; grpc.insecure_channel('localhost:50051')"]
-    #   interval: 30s
-    #   timeout: 10s
-    #   retries: 3
-    #   start_period: 40s
-    # networks:
-    #   - core-network
-    # restart: unless-stopped
+  embedder-app:
+    image: humanbelnik/kinoswap-embedder:latest
+    container_name: embedder-app
+    ports:
+      - "50051:50051"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import grpc; grpc.insecure_channel('localhost:50051')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    volumes:
+      - ./embedder/model:/app/model:ro
+    networks:
+      - core-network
+    restart: unless-stopped
 
 networks:
   core-network:

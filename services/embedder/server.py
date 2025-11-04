@@ -1,8 +1,8 @@
 import grpc
 from concurrent import futures
 import logging
-import api.proto.embedder_pb2 as  embedding_pb2
-import api.proto.embedder_pb2_grpc as embedding_pb2_grpc 
+import embedder_pb2 as  embedding_pb2
+import embedder_pb2_grpc as embedding_pb2_grpc 
 from service import EmbeddingService
 
 class EmbeddingServicer(embedding_pb2_grpc.EmbeddingServiceServicer):

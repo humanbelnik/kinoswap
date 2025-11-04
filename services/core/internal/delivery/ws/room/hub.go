@@ -169,7 +169,7 @@ func (h *Hub) StartVoting(roomCode string, userID string) error {
 			Payload: map[string]interface{}{
 				"initiated_by": userID,
 				"room_code":    roomCode,
-				"redirect_url": "/voting.html?room=" + roomCode,
+				"redirect_url": "/rooms/" + roomCode + "/voting/",
 			},
 		},
 	}
@@ -183,10 +183,11 @@ func (h *Hub) NotifyVotingComplete(roomCode string) error {
 		event: Event{
 			Type: EventVotingFinished,
 			Payload: map[string]interface{}{
-				"room_code": roomCode,
-				"message":   "All participants have voted",
-				"code":      roomCode,
-				"timestamp": time.Now().Unix(),
+				"room_code":    roomCode,
+				"message":      "All participants have voted",
+				"code":         roomCode,
+				"redirect_url": "/rooms/" + roomCode + "/results/",
+				"timestamp":    time.Now().Unix(),
 			},
 		},
 	}

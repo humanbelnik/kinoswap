@@ -84,7 +84,7 @@ func newHTTP() *HTTPServer {
 func newEmbedder() *Embedder {
 	return &Embedder{
 		Port: getenv("EMBEDDER_PORT", "50051"),
-		Host: getenv("EMBEDDER_HOST", "localhost"),
+		Host: getenv("EMBEDDER_HOST", "embedder-app"),
 	}
 }
 
