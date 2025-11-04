@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/humanbelnik/kinoswap/core/internal/model"
@@ -224,4 +225,18 @@ func (d *Driver) UUIDByCode(ctx context.Context, code string) (uuid.UUID, error)
 		return uuid.Nil, err
 	}
 	return _uuid, nil
+}
+
+func (d *Driver) CleanupOrphantRooms(ctx context.Context, lobbiesDeadline, votingDeadline time.Duration) error {
+	query := `
+        DELETE FROM rooms 
+        WHERE 
+            (status = 'LOBBY' AND created_at < NOW() - $1::interval) OR
+            (status = 'VOTING' AND created_at < NOW() - $2::interval)
+    `
+	_, err := d.db.ExecContext(ctx, query, lobbiesDeadline, votingDeadline)
+	if err != nil {
+		return err
+	}
+	return nil
 }

@@ -43,7 +43,7 @@ func Go(cfg *config.Config) {
 	voteRepo := infra_postgres_vote.New(pgConn)
 	movieRepository := infra_postgres_movie.New(pgConn)
 
-	roomUC := usecase_room.New(roomRepository, embedder)
+	roomUC := usecase_room.New(roomRepository, embedder, 20 /* orphant room cleanups on every _ booking */)
 
 	hub := ws_room.NewHub(roomUC)
 	go hub.Run()

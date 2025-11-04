@@ -7,7 +7,8 @@ CREATE TABLE IF NOT EXISTS rooms (
     id_admin UUID NOT NULL,
     code TEXT UNIQUE,
     ready INT DEFAULT 0,
-    status TEXT DEFAULT 'LOBBY'
+    status TEXT DEFAULT 'LOBBY',
+    created_at TIMESTAMP DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS participants (
