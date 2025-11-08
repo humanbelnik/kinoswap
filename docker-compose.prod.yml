@@ -23,7 +23,6 @@ services:
       - core-network
     restart: unless-stopped
 
-
   core-postgres:
     image: pgvector/pgvector:pg16
     container_name: postgres-core-service
@@ -97,6 +96,75 @@ services:
     networks:
       - core-network
     restart: unless-stopped
+
+  nginx:
+    image: nginx:1.24-alpine
+    container_name: kinoswap-nginx-service
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./static:/usr/share/nginx/static:ro
+    depends_on:
+      - core-app
+    networks:
+      - core-network
+    restart: unless-stopped
+
+  pgadmin:
+    image: dpage/pgadmin4:8
+    container_name: pgadmin-core-service
+    env_file:
+      - .env
+    ports:
+      - "8888:8888"
+    networks:
+      - core-network
+    restart: unless-stopped
+    depends_on:
+      - core-postgres
+
+  core-integration-tests:
+    build:
+      context: ./services/core 
+      dockerfile: Dockerfile.test
+      target: test-runner
+    env_file:
+      - .env
+    networks:
+      - core-network
+    depends_on:
+      core-migrate:
+        condition: service_completed_successfully
+    command: ["sh", "-c", "go test -tags=integration ./internal/usecase/integration_test/..."]
+
+  core-unit-tests:
+    build:
+      context: ./services/core 
+      dockerfile: Dockerfile.test
+      target: test-runner
+    env_file:
+      - .env
+    networks:
+      - core-network
+    depends_on:
+      core-migrate:
+        condition: service_completed_successfully
+    command: ["sh", "-c", "go test ./internal/usecase/... -tags='!integration'"]
+
+  e2e-tests:
+    build:
+      context: ./services/e2e
+      dockerfile: Dockerfile
+    container_name: kinoswap-e2e-tests
+    networks:
+      - core-network
+    depends_on:
+      core-app:
+        condition: service_started
+    environment:
+      - ENV=CI
 
 networks:
   core-network:

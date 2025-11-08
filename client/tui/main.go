@@ -662,7 +662,7 @@ func (c *Client) Close() {
 }
 
 func main() {
-	client := NewClient("http://localhost:8080/api/v1")
+	client := NewClient("http://localhost/api/")
 	defer client.Close()
 
 	scanner := bufio.NewScanner(os.Stdin)
