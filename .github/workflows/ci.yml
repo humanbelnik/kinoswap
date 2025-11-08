@@ -40,7 +40,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: unit-test-results-${{ github.run_id }}
+          name: unit-test-results
           path: allure-results/
 
   integration-tests:
@@ -94,7 +94,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name:  integration-test-results-${{ github.run_id }}
+          name:  integration-test-results
           path: allure-results/
 
   e2e-tests:
@@ -150,7 +150,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name:  e2e-test-results-${{ github.run_id }}
+          name:  e2e-test-results
           path: allure-results/
 
   generate-allure-report:
@@ -166,19 +166,19 @@ jobs:
       - name: Download unit test results
         uses: actions/download-artifact@v4
         with:
-          name: unit-test-results-${{ github.run_id }}
+          name: unit-test-results
           path: allure-results/
 
       - name: Download integration test results
         uses: actions/download-artifact@v4
         with:
-          name: integration-test-results-${{ github.run_id }}
+          name: integration-test-results
           path: allure-results/
 
       - name: Download e2e test results
         uses: actions/download-artifact@v4
         with:
-          name: e2e-test-results-${{ github.run_id }}
+          name: e2e-test-results
           path: allure-results/
 
       - name: Checkout gh-pages
