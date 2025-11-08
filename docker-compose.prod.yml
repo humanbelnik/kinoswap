@@ -146,9 +146,6 @@ services:
       target: test-runner
     networks:
       - core-network
-    depends_on:
-      core-migrate:
-        condition: service_completed_successfully
     command: ["sh", "-c", "go test ./internal/usecase/... -tags='!integration'"]
 
   e2e-tests:
