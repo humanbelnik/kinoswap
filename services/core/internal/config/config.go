@@ -91,14 +91,14 @@ func newEmbedder() *Embedder {
 func newRedis() *RedisCache {
 	return &RedisCache{
 		Port:     getenv("REDIS_PORT", "6379"),
-		Host:     getenv("REDIS_HOST", "redis"),
+		Host:     getenv("REDIS_HOST", "core-redis"),
 		Password: getenv("REDIS_PASSWORD", "shared"),
 	}
 }
 
 func newPostgres() *Postgres {
 	return &Postgres{
-		Host:     getenv("DB_HOST", "localhost"),
+		Host:     getenv("DB_HOST", "core-postgres"),
 		Port:     getenv("DB_PORT", "5432"),
 		User:     getenv("DB_USER", "admin"),
 		Password: getenv("DB_PASSWORD", "shared"),
