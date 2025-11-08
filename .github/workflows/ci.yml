@@ -17,10 +17,19 @@ jobs:
       - name: Setup Docker Compose
         uses: docker/setup-buildx-action@v3
 
-      - name: Create .env file from secrets
+      - name: Create .env file
         run: |
-          chmod +x script/cpenvci.sh
-          ./script/cpenvci.sh
+          cat << EOF > .env
+          HTTP_HOST=${{ secrets.HTTP_HOST }}
+          REDIS_HOST=${{ secrets.REDIS_HOST }}
+          DB_HOST=${{ secrets.DB_HOST }}
+          AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION=${{ secrets.AWS_REGION }}
+          AWS_S3_FORCE_PATH_STYLE=${{ secrets.AWS_S3_FORCE_PATH_STYLE }}
+          AWS_S3_ENDPOINT=${{ secrets.AWS_S3_ENDPOINT }}
+          ADMIN_SECRET=${{ secrets.ADMIN_SECRET }}
+          EOF
 
       - name: Run unit tests
         run: |
