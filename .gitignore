@@ -7,7 +7,6 @@
 *.dll
 *.so
 *.dylib
-*mocks/
 # Test binary, built with `go test -c`
 .env.test
 
