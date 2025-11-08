@@ -82,8 +82,7 @@ jobs:
       - name: Run integration tests
         run: |
           docker compose -f docker-compose.prod.yml build core-postgres
-          docker compose -f docker-compose.prod.yml run -e POSTGRES_USER=${{ secrets.POSTGRES_USER }} -e POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }} \
-          -e POSTGRES_DB=${{ secrets.POSTGRES_DB }} --rm core-postgres
+          docker compose -f docker-compose.prod.yml run --rm core-postgres
 
           docker compose -f docker-compose.prod.yml build core-migrate
           docker compose -f docker-compose.prod.yml run --rm core-migrate
