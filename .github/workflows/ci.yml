@@ -150,8 +150,8 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name:  e2e-test-results
-          path: /allure-results/
+          name: e2e-test-results
+          path: allure-results/
 
   generate-allure-report:
     name: Generate and Publish Allure Report
