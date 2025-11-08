@@ -1,6 +1,8 @@
 package app
 
 import (
+	"os"
+
 	"github.com/humanbelnik/kinoswap/core/internal/config"
 	http_auth "github.com/humanbelnik/kinoswap/core/internal/delivery/http/auth"
 	http_init "github.com/humanbelnik/kinoswap/core/internal/delivery/http/init"
@@ -18,6 +20,7 @@ import (
 	infra_redis_init "github.com/humanbelnik/kinoswap/core/internal/infra/redis/init"
 	infra_session_cache "github.com/humanbelnik/kinoswap/core/internal/infra/redis/session"
 	infra_s3 "github.com/humanbelnik/kinoswap/core/internal/infra/s3"
+	"github.com/humanbelnik/kinoswap/core/internal/infra/s3mock"
 	servie_simple_auth "github.com/humanbelnik/kinoswap/core/internal/service/auth/simple"
 	"github.com/humanbelnik/kinoswap/core/internal/service/embedding_reducer"
 	usecase_movie "github.com/humanbelnik/kinoswap/core/internal/usecase/movie"
@@ -30,11 +33,17 @@ func Go(cfg *config.Config) {
 	redisConn := infra_redis_init.MustEstablishConn(cfg.Redis)
 	pgConn := infra_pg_init.MustEstablishConn(cfg.Postgres)
 	embedder := infra_embedder.MustEstablishConnection(cfg.Embedder)
-	s3conn := infra_s3.MustEstabilishConn()
 
-	posterRepository, err := infra_s3.New("hbk-test-bucket", s3conn, "poster/")
-	if err != nil {
-		panic(err)
+	var posterRepository any
+	var err error
+	if os.Getenv("AWS_ACCESS_KEY_ID") == "" {
+		posterRepository = s3mock.New()
+	} else {
+		s3conn := infra_s3.MustEstabilishConn()
+		posterRepository, err = infra_s3.New("hbk-test-bucket", s3conn, "poster/")
+		if err != nil {
+			panic(err)
+		}
 	}
 
 	embeddingReducer := embedding_reducer.New()
@@ -48,7 +57,7 @@ func Go(cfg *config.Config) {
 	hub := ws_room.NewHub(roomUC)
 	go hub.Run()
 	voteUC := usecase_vote.New(voteRepo, roomUC)
-	movieUC := usecase_movie.New(movieRepository, posterRepository, embedder, embeddingReducer)
+	movieUC := usecase_movie.New(movieRepository, posterRepository.(usecase_movie.PosterRepository), embedder, embeddingReducer)
 
 	sessionCache := infra_session_cache.New(redisConn, "session_cache")
 	authService := servie_simple_auth.New(nil, sessionCache, nil)

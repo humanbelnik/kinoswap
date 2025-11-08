@@ -185,7 +185,7 @@ jobs:
       - name: Prepare results with history
         run: |
           mkdir -p combined-results
-          cp -r all-results/* combined-results/
+          cp -r allure-results/* combined-results/
 
           if [ -d "gh-pages/history" ]; then
             echo "Restoring history from gh-pages"
