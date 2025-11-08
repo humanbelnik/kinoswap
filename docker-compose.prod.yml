@@ -144,8 +144,6 @@ services:
       context: ./services/core 
       dockerfile: Dockerfile.test
       target: test-runner
-    env_file:
-      - .env
     networks:
       - core-network
     depends_on:
