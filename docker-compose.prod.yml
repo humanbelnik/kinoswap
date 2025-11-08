@@ -138,7 +138,7 @@ services:
       core-migrate:
         condition: service_completed_successfully
     environment:
-      - ALLURE_OUTPUT_PATH=/app/allure-results
+      - ALLURE_OUTPUT_PATH=/app
     volumes:
       - ./allure-results:/app/allure-results
     command: ["sh", "-c", "go test ./internal/usecase/... -tags='integration' ./internal/usecase/integration_test/... -test.v"]
@@ -151,7 +151,7 @@ services:
     networks:
       - core-network
     environment:
-      - ALLURE_OUTPUT_PATH=/app/allure-results
+      - ALLURE_OUTPUT_PATH=/app
     volumes:
       - ./allure-results:/app/allure-results
     command: ["sh", "-c", "go test ./internal/usecase/... -tags='!integration' -test.v"]

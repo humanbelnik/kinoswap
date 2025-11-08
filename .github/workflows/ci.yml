@@ -212,13 +212,15 @@ jobs:
 
       # 9. Публикация на GitHub Pages
       - name: Deploy to GitHub Pages
+        if: always()
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_branch: gh-pages
           publish_dir: gh-pages
-          force_orphan: true
+          force_orphan: false
           keep_files: false
+
 
       # 10. Сохраняем историю на случай следующего запуска
       - name: Upload history for future runs
