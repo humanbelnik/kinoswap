@@ -156,13 +156,13 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: unit-test-results-${{ github.run_id }}
-          path: all-results/unit
+          path: allure-results/
 
       - name: Download integration test results
         uses: actions/download-artifact@v4
         with:
           name: integration-test-results-${{ github.run_id }}
-          path: all-results/integration
+          path: allure-results/
 
       # 3. Чекаут ветки gh-pages для истории
       - name: Checkout gh-pages
