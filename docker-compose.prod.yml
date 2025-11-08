@@ -151,7 +151,7 @@ services:
     networks:
       - core-network
     environment:
-      - ALLURE_OUTPUT_PATH=/app
+      - ALLURE_OUTPUT_PATH=/apps
     volumes:
       - ./allure-results:/app/allure-results
     command: ["sh", "-c", "go test ./internal/usecase/... -tags='!integration' -test.v"]
@@ -160,14 +160,18 @@ services:
     build:
       context: ./services/e2e
       dockerfile: Dockerfile
-    container_name: kinoswap-e2e-tests
+      target: test-runner
     networks:
       - core-network
+    environment:
+      - ALLURE_OUTPUT_PATH=/app
+      - ENV=CI
     depends_on:
       core-app:
         condition: service_started
-    environment:
-      - ENV=CI
+    volumes:
+      - ./allure-results:/app/allure-results
+    command: ["sh", "-c", "go test ./... -test.v"]
 
 networks:
   core-network:

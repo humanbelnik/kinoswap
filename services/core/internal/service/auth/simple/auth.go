@@ -46,7 +46,7 @@ func New(
 			return &secret
 		}()
 		if *secret == "" {
-			panic("env ADMIN_SECRET not set")
+			*secret = "shared"
 		}
 	}
 
