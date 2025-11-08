@@ -55,7 +55,7 @@ services:
       - ./services/core/migration:/migration
     command:
       - "-path=/migration"
-      - "-database=postgres://admin:shared@core-postgres:5342/test?sslmode=disable"
+      - "-database=postgres://admin:shared@core-postgres:5432/test?sslmode=disable"
       - "up"
     networks:
       - core-network
