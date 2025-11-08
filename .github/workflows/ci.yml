@@ -19,8 +19,8 @@ jobs:
 
       - name: Create .env file from secrets
         run: |
-          chmod +x scripts/cpenvci.sh
-          ./scripts/cpenvci.sh
+          chmod +x script/cpenvci.sh
+          ./script/cpenvci.sh
 
       - name: Run unit tests
         run: |
