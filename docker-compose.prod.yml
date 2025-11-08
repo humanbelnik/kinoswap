@@ -151,10 +151,10 @@ services:
     networks:
       - core-network
     environment:
-      - ALLURE_OUTPUT_PATH=/apps
+      - ALLURE_OUTPUT_PATH=/app
     volumes:
       - ./allure-results:/app/allure-results
-    command: ["sh", "-c", "go test ./internal/usecase/... -tags='!integration' -test.v"]
+    command: ["sh", "-c", "go test ./internal/usecase/... -tags='!integration' . -test.v"]
 
   e2e-tests:
     build:
