@@ -1,6 +1,18 @@
 
 mock-usecase-deps: mock-vote-usecase-deps mock-room-usecase-deps mock-movie-usecase-deps
 
+usecase-mocks:
+	go generate ./...
+
+build-run:
+	docker-compose -f docker-compose.prod.yml up --build
+
+run-storages:
+	docker-compose up --build migrate redis
+
+swagger:
+	swag init -g cmd/app/main.go
+
 mock-vote-usecase-deps:
 	mockery --dir ./internal/usecase/vote --name VoteRepository --output ./mocks/vote/repository --filename vote.go
 
@@ -14,7 +26,7 @@ mock-movie-usecase-deps:
 	mockery --dir ./internal/usecase/movie --name Embedder --output ./mocks/movie/embedder --filename embedder.go
 	mockery --dir ./internal/usecase/movie --name EmbeddingRepository --output ./mocks/movie/repository --filename embedding.go
 	mockery --dir ./internal/usecase/movie --name MovieRepository --output ./mocks/movie/repository --filename movie.go
-
+	mockery --dir ./internal/usecase/movie --name PosterStorage --output ./mocks/movie/s3 --filename s3.go
 
 ALLURE_RESULTS_DIR = allure-results
 ALLURE_REPORT_DIR = allure-report

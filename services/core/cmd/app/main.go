@@ -10,6 +10,15 @@ import (
 // @version 1.0
 // @host localhost:8080
 // @BasePath /api/v1/
+
+// @securityDefinitions.apikey AdminToken
+// @in header
+// @name X-admin-token
+
+// @securityDefinitions.apikey UserToken
+// @in header
+// @name X-user-token
+
 func main() {
 	app.Go(config.Load())
 }

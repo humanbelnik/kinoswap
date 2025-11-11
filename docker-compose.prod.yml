@@ -1,0 +1,179 @@
+services:
+  core-app:
+    build:
+      context: ./services/core
+      dockerfile: Dockerfile.app
+    container_name: app-core-service
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    depends_on:
+      core-migrate:
+        condition: service_completed_successfully
+      core-redis:
+        condition: service_healthy
+      core-postgres:
+        condition: service_healthy
+      embedder-app:
+        condition: service_healthy
+    volumes:
+      - ~/.aws:/root/.aws
+    networks:
+      - core-network
+    restart: unless-stopped
+
+  core-postgres:
+    image: pgvector/pgvector:pg16
+    container_name: postgres-core-service
+    env_file:
+      - .env
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: shared
+      POSTGRES_DB: test
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./services/core/migration:/migration
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d test"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+    networks:
+      - core-network
+
+  core-migrate:
+    image: migrate/migrate
+    depends_on:
+      core-postgres:
+        condition: service_healthy
+    env_file:
+      - .env
+    volumes:
+      - ./services/core/migration:/migration
+    command:
+      - "-path=/migration"
+      - "-database=postgres://admin:shared@core-postgres:5432/test?sslmode=disable"
+      - "up"
+    networks:
+      - core-network
+
+  core-redis:
+    image: redis:7.2-alpine
+    container_name: redis-core-service
+    env_file:
+      - .env
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--requirepass", "shared"]
+    volumes:
+      - ./services/core/redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "--pass", "shared", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    networks:
+      - core-network
+
+  embedder-app:
+    image: humanbelnik/kinoswap-embedder:latest
+    container_name: embedder-app
+    ports:
+      - "50051:50051"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import grpc; grpc.insecure_channel('localhost:50051')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    volumes:
+      - ./services/embedder/model:/app/model:ro
+    networks:
+      - core-network
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:1.24-alpine
+    container_name: kinoswap-nginx-service
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./static:/usr/share/nginx/static:ro
+    depends_on:
+      - core-app
+    networks:
+      - core-network
+    restart: unless-stopped
+
+  pgadmin:
+    image: dpage/pgadmin4:8
+    container_name: pgadmin-core-service
+    env_file:
+      - .env
+    ports:
+      - "8888:8888"
+    networks:
+      - core-network
+    restart: unless-stopped
+    depends_on:
+      - core-postgres
+
+  core-integration-tests:
+    build:
+      context: ./services/core 
+      dockerfile: Dockerfile.test
+      target: test-runner
+    env_file:
+      - .env
+    networks:
+      - core-network
+    depends_on:
+      core-migrate:
+        condition: service_completed_successfully
+    environment:
+      - ALLURE_OUTPUT_PATH=/app
+    volumes:
+      - ./allure-results:/app/allure-results
+    command: ["sh", "-c", "go test ./internal/usecase/... -tags='integration' ./internal/usecase/integration_test/... -test.v"]
+
+  core-unit-tests:
+    build:
+      context: ./services/core
+      dockerfile: Dockerfile.test
+      target: test-runner
+    networks:
+      - core-network
+    environment:
+      - ALLURE_OUTPUT_PATH=/app
+    volumes:
+      - ./allure-results:/app/allure-results
+    command: ["sh", "-c", "go test ./internal/usecase/... -tags='!integration' . -test.v"]
+
+  e2e-tests:
+    build:
+      context: ./services/e2e
+      dockerfile: Dockerfile
+      target: test-runner
+    networks:
+      - core-network
+    environment:
+      - ALLURE_OUTPUT_PATH=/app
+      - ENV=CI
+    depends_on:
+      core-app:
+        condition: service_started
+    volumes:
+      - ./allure-results:/app/allure-results
+    command: ["sh", "-c", "go test ./... -test.v"]
+
+networks:
+  core-network:
+    driver: bridge
+    

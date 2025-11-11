@@ -1,113 +1,154 @@
 package ws_room
 
 import (
-	"encoding/json"
-	"log/slog"
-	"sync"
+	"net/http"
 
+	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
-	"github.com/humanbelnik/kinoswap/core/internal/model"
 )
 
-type MessageType string
-
-const (
-	VotingStarted MessageType = "voting_started"
-)
-
-type Message struct {
-	Type   MessageType            `json:"type"`
-	RoomID string                 `json:"room_id"`
-	Data   map[string]interface{} `json:"data,omitempty"`
+var upgrader = websocket.Upgrader{
+	CheckOrigin: func(r *http.Request) bool {
+		return true
+	},
 }
 
-type Client struct {
-	Hub    *Hub
-	Conn   *websocket.Conn
-	Send   chan []byte
-	RoomID model.RoomID
+type Controller struct {
+	hub *Hub
 }
 
-type Hub struct {
-	mu sync.RWMutex
-
-	// Keep track of sets of Clinets within each room
-	rooms map[model.RoomID]map[*Client]bool
-
-	logger *slog.Logger
-}
-
-func New(logger *slog.Logger) *Hub {
-	return &Hub{
-		rooms:  make(map[model.RoomID]map[*Client]bool),
-		logger: logger,
+func NewController(hub *Hub) *Controller {
+	return &Controller{
+		hub: hub,
 	}
 }
 
-func (h *Hub) RegisterClient(client *Client) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
-	if _, ok := h.rooms[client.RoomID]; !ok {
-		h.rooms[client.RoomID] = make(map[*Client]bool)
-	}
-	h.rooms[client.RoomID][client] = true
-
-	h.logger.Info("client registered", "room_id", client.RoomID)
-}
-
-func (h *Hub) RemoveClient(client *Client) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
-	if room, ok := h.rooms[client.RoomID]; ok {
-		delete(room, client)
-		if len(room) == 0 {
-			delete(h.rooms, client.RoomID)
-		}
-	}
-	h.logger.Info("client unregistered", "room_id", client.RoomID)
-}
-
-func (h *Hub) BroadcastToRoom(roomID model.RoomID, message Message) {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-
-	messageBytes, _ := json.Marshal(message)
-
-	if clients, ok := h.rooms[roomID]; ok {
-		for client := range clients {
-			select {
-			case client.Send <- messageBytes:
-			default:
-				close(client.Send)
-				delete(h.rooms[roomID], client)
-			}
-		}
+func (c *Controller) RegisterRoutes(router *gin.RouterGroup) {
+	ws := router.Group("/ws")
+	{
+		ws.GET("/rooms/:room_id", c.connect)
 	}
 }
 
-func (h *Hub) StartClientReading(client *Client) {
+type ConnectRequest struct {
+	UserToken string `header:"X-user-token" binding:"required"`
+}
+
+func (c *Controller) connect(ctx *gin.Context) {
+	roomCode := ctx.Param("room_id")
+
+	userToken := ctx.Query("token")
+	if userToken == "" {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "token query parameter required"})
+		return
+	}
+
+	status, err := c.hub.usecase.Status(ctx, roomCode)
+	if err != nil {
+		ctx.JSON(http.StatusNotFound, gin.H{"error": "Room not found"})
+		return
+	}
+
+	isOwner, _ := c.hub.usecase.IsOwner(ctx, roomCode, userToken)
+	role := "participant"
+	if isOwner {
+		role = "owner"
+	}
+
+	conn, err := upgrader.Upgrade(ctx.Writer, ctx.Request, nil)
+	if err != nil {
+		c.hub.logger.Error("failed to upgrade connection", "error", err)
+		return
+	}
+
+	client := &Client{
+		hub:      c.hub,
+		conn:     conn,
+		send:     make(chan Event, 256),
+		userID:   userToken,
+		roomCode: roomCode,
+		role:     role,
+	}
+
+	c.hub.register <- client
+
+	go client.writePump()
+	go client.readPump()
+
+	c.hub.logger.Info("WebSocket connection established",
+		"user_id", userToken,
+		"room", roomCode,
+		"role", role,
+		"status", status)
+}
+
+func (c *Client) readPump() {
 	defer func() {
-		h.RemoveClient(client)
-		client.Conn.Close()
+		c.hub.unregister <- c
+		c.conn.Close()
 	}()
 
 	for {
-		_, _, err := client.Conn.ReadMessage()
+		var event Event
+		err := c.conn.ReadJSON(&event)
 		if err != nil {
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+				c.hub.logger.Error("WebSocket read error", "error", err)
+			}
 			break
 		}
+
+		c.handleEvent(event)
 	}
 }
 
-func (h *Hub) StartClientWriting(client *Client) {
-	defer client.Conn.Close()
+func (c *Client) writePump() {
+	defer c.conn.Close()
 
-	for message := range client.Send {
-		err := client.Conn.WriteMessage(websocket.TextMessage, message)
+	for event := range c.send {
+		if err := c.conn.WriteJSON(event); err != nil {
+			c.hub.logger.Error("WebSocket write error", "error", err)
+			return
+		}
+	}
+
+	c.conn.WriteMessage(websocket.CloseMessage, []byte{})
+}
+
+func (c *Client) handleEvent(event Event) {
+	switch event.Type {
+	case "START_VOTING":
+		if c.role != "owner" {
+			c.send <- Event{
+				Type: EventError,
+				Payload: map[string]interface{}{
+					"message": "Only room owner can start voting",
+				},
+			}
+			return
+		}
+
+		err := c.hub.StartVoting(c.roomCode, c.userID)
 		if err != nil {
-			break
+			c.send <- Event{
+				Type: EventError,
+				Payload: map[string]interface{}{
+					"message": "Failed to start voting: " + err.Error(),
+				},
+			}
+			return
+		}
+
+		c.hub.logger.Info("voting started",
+			"room", c.roomCode,
+			"initiated_by", c.userID)
+
+	default:
+		c.send <- Event{
+			Type: EventError,
+			Payload: map[string]interface{}{
+				"message": "Unknown event type: " + event.Type,
+			},
 		}
 	}
 }

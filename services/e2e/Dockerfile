@@ -1,0 +1,26 @@
+FROM golang:1.25-alpine AS builder
+
+WORKDIR /app
+
+RUN apk add --no-cache git ca-certificates
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+
+RUN CGO_ENABLED=0 GOOS=linux go build -o /app/main .
+
+FROM golang:1.25-alpine AS test-runner
+
+RUN mkdir -p /app/allure-results
+ENV ALLURE_OUTPUT_PATH=/app/allure-results
+
+WORKDIR /app
+
+RUN apk add --no-cache git
+
+COPY --from=builder /app/go.mod /app/go.sum ./
+RUN go mod download
+
+COPY --from=builder /app ./
