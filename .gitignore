@@ -7,7 +7,7 @@
 *.dll
 *.so
 *.dylib
-# Test binary, built with `go test -c`
+git rm -rf .# Test binary, built with `go test -c`
 .env.test
 
 *allure*
