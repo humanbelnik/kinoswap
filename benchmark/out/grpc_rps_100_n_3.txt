@@ -1,0 +1,47 @@
+
+Summary:
+  Count:	132
+  Total:	10.00 s
+  Slowest:	1.15 s
+  Fastest:	396.25 ms
+  Average:	751.48 ms
+  Requests/sec:	13.20
+
+Response time histogram:
+  396.247  [1]  |∎∎
+  471.368  [1]  |∎∎
+  546.488  [3]  |∎∎∎∎∎
+  621.608  [17] |∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎
+  696.729  [25] |∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎
+  771.849  [15] |∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎
+  846.969  [21] |∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎
+  922.089  [13] |∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎
+  997.210  [11] |∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎
+  1072.330 [5]  |∎∎∎∎∎∎∎∎
+  1147.450 [10] |∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎
+
+Latency distribution:
+  10 % in 590.14 ms 
+  25 % in 649.79 ms 
+  50 % in 765.43 ms 
+  75 % in 901.59 ms 
+  90 % in 1.04 s 
+  95 % in 1.11 s 
+  99 % in 1.14 s 
+
+Status code distribution:
+  [OK]            122 responses   
+  [Unavailable]   10 responses    
+
+Error distribution:
+  [1]   rpc error: code = Unavailable desc = error reading from server: read tcp 127.0.0.1:43726->127.0.0.1:50051: use of closed network connection   
+  [1]   rpc error: code = Unavailable desc = error reading from server: read tcp 127.0.0.1:43654->127.0.0.1:50051: use of closed network connection   
+  [1]   rpc error: code = Unavailable desc = error reading from server: read tcp 127.0.0.1:43750->127.0.0.1:50051: use of closed network connection   
+  [1]   rpc error: code = Unavailable desc = error reading from server: read tcp 127.0.0.1:43652->127.0.0.1:50051: use of closed network connection   
+  [1]   rpc error: code = Unavailable desc = error reading from server: read tcp 127.0.0.1:43680->127.0.0.1:50051: use of closed network connection   
+  [1]   rpc error: code = Unavailable desc = error reading from server: read tcp 127.0.0.1:43704->127.0.0.1:50051: use of closed network connection   
+  [1]   rpc error: code = Unavailable desc = error reading from server: read tcp 127.0.0.1:43714->127.0.0.1:50051: use of closed network connection   
+  [1]   rpc error: code = Unavailable desc = error reading from server: read tcp 127.0.0.1:43734->127.0.0.1:50051: use of closed network connection   
+  [1]   rpc error: code = Unavailable desc = error reading from server: read tcp 127.0.0.1:43692->127.0.0.1:50051: use of closed network connection   
+  [1]   rpc error: code = Unavailable desc = error reading from server: read tcp 127.0.0.1:43682->127.0.0.1:50051: use of closed network connection   
+

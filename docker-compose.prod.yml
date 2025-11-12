@@ -118,7 +118,7 @@ services:
     env_file:
       - .env
     ports:
-      - "8888:8888"
+      - "8181:80"
     networks:
       - core-network
     restart: unless-stopped
