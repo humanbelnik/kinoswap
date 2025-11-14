@@ -16,7 +16,7 @@ services:
       core-postgres:
         condition: service_healthy
       embedder-app:
-        condition: service_healthy
+        condition: service_started
     volumes:
       - ~/.aws:/root/.aws
     networks:
@@ -81,16 +81,21 @@ services:
       - core-network
 
   embedder-app:
-    image: humanbelnik/kinoswap-embedder:latest
+    build:
+      context: ./services/embedder
+      dockerfile: Dockerfile.app
     container_name: embedder-app
+    deploy:
+      resources:
+        limits:
+          cpus: '1.7' 
+        reservations:
+          cpus: '1.7'
     ports:
       - "50051:50051"
-    healthcheck:
-      test: ["CMD", "python", "-c", "import grpc; grpc.insecure_channel('localhost:50051')"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
+      - "5000:5000"
+    environment:
+      - DELIVERY_PROTO=HTTP
     volumes:
       - ./services/embedder/model:/app/model:ro
     networks:

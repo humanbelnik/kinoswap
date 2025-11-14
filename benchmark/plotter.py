@@ -2,84 +2,95 @@ import json
 import matplotlib.pyplot as plt
 import numpy as np
 
-def plot_ghz_summary(json_file_path, rps, output_image_path=None):
-    """
-    Строит два графика на одном plot:
-    - слева: гистограмма по fixed_bins_300ms
-    - справа: latency percentiles
-    """
+def plot_ghz_comparison(grpc_json_file, http_json_file, rps, output_image_path=None):
+    with open(grpc_json_file, 'r') as f:
+        grpc_data = json.load(f)
     
-    # Читаем данные из JSON файла
-    with open(json_file_path, 'r') as f:
-        data = json.load(f)
+    with open(http_json_file, 'r') as f:
+        http_data = json.load(f)
     
-    # Создаем фигуру с двумя подграфиками
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
     
-    # Первый график: гистограмма fixed_bins_300ms
-    if 'fixed_bins_300ms' in data:
-        fixed_bins = data['fixed_bins_300ms']
-        labels = fixed_bins['labels']
-        counts = fixed_bins['counts']
+    
+    if 'fixed_bins_300ms' in grpc_data and 'fixed_bins_300ms' in http_data:
+        grpc_fixed_bins = grpc_data['fixed_bins_300ms']
+        http_fixed_bins = http_data['fixed_bins_300ms']
         
-        # Создаем гистограмму
+        labels = grpc_fixed_bins['labels']
+        grpc_counts = grpc_fixed_bins['counts']
+        http_counts = http_fixed_bins['counts']
+        
         x_pos = np.arange(len(labels))
-        bars = ax1.bar(x_pos, counts, color='skyblue', edgecolor='black', alpha=0.7)
+        bar_width = 0.35
         
-        # Настраиваем график
+        grpc_bars = ax1.bar(x_pos - bar_width/2, grpc_counts, bar_width, 
+                           color='red', edgecolor='darkred', alpha=0.7, 
+                           label='gRPC')
+        http_bars = ax1.bar(x_pos + bar_width/2, http_counts, bar_width, 
+                           color='blue', edgecolor='darkblue', alpha=0.7, 
+                           label='HTTP')
+        
         ax1.set_xlabel('Время ответа (мс)')
         ax1.set_ylabel('Количество запросов')
-        ax1.set_title('Гистограмма времени ответа\n(бины по 300мс)')
+        ax1.set_title('Сравнение гистограмм времени ответа\n(бины по 150мс)')
         ax1.set_xticks(x_pos)
         ax1.set_xticklabels(labels, rotation=45, ha='right')
+        ax1.legend()
         
-        # Добавляем значения над столбцами
-        for bar, count in zip(bars, counts):
-            height = bar.get_height()
-            if height > 0:  # Подписываем только ненулевые значения
-                ax1.text(bar.get_x() + bar.get_width()/2., height + 0.1,
-                        f'{count:.1f}', ha='center', va='bottom', fontsize=8)
+        for bars, counts in [(grpc_bars, grpc_counts), (http_bars, http_counts)]:
+            for bar, count in zip(bars, counts):
+                height = bar.get_height()
+                if height > 0:
+                    ax1.text(bar.get_x() + bar.get_width()/2., height + 0.1,
+                            f'{count}', ha='center', va='bottom', fontsize=7)
         
-        # Настраиваем сетку
         ax1.grid(True, alpha=0.3, axis='y')
     
-    # Второй график: latency percentiles
-    if 'latency_percentiles' in data:
-        percentiles_data = data['latency_percentiles']
+
+    if 'latency_percentiles' in grpc_data and 'latency_percentiles' in http_data:
+        grpc_percentiles = grpc_data['latency_percentiles']
+        http_percentiles = http_data['latency_percentiles']
         
-        # Подготавливаем данные для графика
-        percentiles = list(percentiles_data.keys())
-        latency_values = list(percentiles_data.values())
+        percentiles = list(grpc_percentiles.keys())
+        grpc_latency = [grpc_percentiles[p] for p in percentiles]
+        http_latency = [http_percentiles[p] for p in percentiles]
         
-        # Создаем гистограмму (столбчатую диаграмму)
         x_pos = np.arange(len(percentiles))
-        bars = ax2.bar(x_pos, latency_values, color='lightgreen', 
-                      edgecolor='darkgreen', alpha=0.7, width=0.6)
+        bar_width = 0.35
         
-        # Настраиваем график
+        grpc_bars = ax2.bar(x_pos - bar_width/2, grpc_latency, bar_width,
+                           color='red', edgecolor='darkred', alpha=0.7,
+                           label='gRPC')
+        http_bars = ax2.bar(x_pos + bar_width/2, http_latency, bar_width,
+                           color='blue', edgecolor='darkblue', alpha=0.7,
+                           label='HTTP')
+        
+        
         ax2.set_xlabel('Персентиль (%)')
         ax2.set_ylabel('Время ответа (мс)')
-        ax2.set_title('Персентили времени ответа')
+        ax2.set_title('Сравнение персентилей времени ответа')
         ax2.grid(True, alpha=0.3, axis='y')
+        ax2.legend()
         
-        # Устанавливаем подписи по оси X
+
         ax2.set_xticks(x_pos)
         ax2.set_xticklabels([f'p{p}' for p in percentiles])
         
-        # Добавляем подписи значений над столбцами
-        for bar, value in zip(bars, latency_values):
-            height = bar.get_height()
-            ax2.text(bar.get_x() + bar.get_width()/2., height + 0.1,
-                    f'{value:.1f}ms', ha='center', va='bottom', fontsize=9)
+        for bars, latency_values in [(grpc_bars, grpc_latency), (http_bars, http_latency)]:
+            for bar, value in zip(bars, latency_values):
+                height = bar.get_height()
+                ax2.text(bar.get_x() + bar.get_width()/2., height + 0.1,
+                        f'{value:.1f}ms', ha='center', va='bottom', fontsize=8)
         
-        # Автоматически настраиваем пределы по Y для лучшего отображения
-        max_latency = max(latency_values)
-        ax2.set_ylim(0, max_latency * 1.1)  # +10% от максимального значения
-    # Настраиваем общий вид
-    plt.suptitle(f'RPS {rps}', fontsize=16, fontweight='bold')
+
+        max_latency = max(max(grpc_latency), max(http_latency))
+        ax2.set_ylim(0, max_latency * 1.15)  
+    
+
+    plt.suptitle(f'gRPC vs HTTP (RPS {rps})', 
+                fontsize=16, fontweight='bold')
     plt.tight_layout()
     
-    # Сохраняем или показываем график
     if output_image_path:
         plt.savefig(output_image_path, dpi=300, bbox_inches='tight')
         print(f"Graph saved to: {output_image_path}")
@@ -89,17 +100,16 @@ def plot_ghz_summary(json_file_path, rps, output_image_path=None):
 def main():
     import sys
     
-    if len(sys.argv) < 2:
-        print("Usage: python3 plot_ghz_summary.py <json_file> [output_image]")
-        print("Example: python3 plot_ghz_summary.py ghz_reduced.json results_plot.png")
+    if len(sys.argv) != 4:
         sys.exit(1)
     
-    json_file = sys.argv[1]
-    output_image = sys.argv[2] if len(sys.argv) > 2 else None
-    
-    rps = sys.argv[3]
+    grpc_json_file = sys.argv[1]
+    http_json_file = sys.argv[2]
+    output_image = sys.argv[3]
+
+    rps = "500"     
     try:
-        plot_ghz_summary(json_file, rps, output_image)
+        plot_ghz_comparison(grpc_json_file, http_json_file, rps, output_image)
     except Exception as e:
         print(f"Error: {e}")
         sys.exit(1)

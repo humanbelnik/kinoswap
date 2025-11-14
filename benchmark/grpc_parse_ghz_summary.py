@@ -57,17 +57,14 @@ def create_fixed_bins(data, bin_step_ms=150):
     # Инициализируем счетчики для фиксированных бинов
     fixed_counts = [0] * (len(fixed_bins) - 1)
     
-    # Распределяем исходные данные по фиксированным бинам
     for bin_value, count in zip(data['histogram_bins'], data['histogram_counts']):
-        # Находим индекс бина для текущего значения
         bin_index = int(bin_value // bin_step_ms)
         if bin_index < len(fixed_counts):
             fixed_counts[bin_index] += count
         else:
-            # Если значение выходит за пределы, добавляем в последний бин
+
             fixed_counts[-1] += count
     
-    # Формируем метки для бинов (например: "0-300", "300-600", etc.)
     bin_labels = [f"{fixed_bins[i]}-{fixed_bins[i+1]}" for i in range(len(fixed_bins)-1)]
     
     return bin_labels, fixed_counts
@@ -80,19 +77,14 @@ def main():
     file_path = sys.argv[1]
     output_path = sys.argv[2]
     
-    # Парсим исходные данные
+    
     parsed_data = parse_ghz_summary(file_path)
-    
-    # Создаем фиксированные бины с шагом 300ms
     fixed_bin_labels, fixed_bin_counts = create_fixed_bins(parsed_data, 150)
-    
-    # Добавляем фиксированные бины в данные
     parsed_data['fixed_bins_300ms'] = {
         'labels': fixed_bin_labels,
         'counts': fixed_bin_counts
     }
     
-    # Сохраняем в JSON файл
     with open(output_path, 'w') as f:
         json.dump(parsed_data, f, indent=2)
     

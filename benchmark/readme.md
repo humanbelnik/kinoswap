@@ -1,14 +1,21 @@
 # Нагрузочное тестирование (ЛР №3 по ТиОПО)
 
-## Цель бенчмарка
+## Benchmark #1. Latency(RPS)
 
-Выявить, какой протокол взаимодействия наиболее эффективен для взаимодействия `Core service` и `Embedding service`:
+### 3 cores
 
-- HTTP
-- gPRC
+![Alt text](img/latency_cores_3.0.png)
 
-## Порядок проведения бенчмарка
+![Alt text](img/metrics_cores_3.0.png)
 
-- Варьируемый параметр: RPS
-- Измеряемые параметры: Latency, CPU-load, RAM-load
+### 2 cores
 
+![Alt text](img/latency_cores_2.0.png)
+
+![Alt text](img/metrics_cores_2.0.png)
+
+## Benchmark #2. Stable RPS
+
+### 3 cores
+
+![Alt text](img/hist_rps_500.png)
