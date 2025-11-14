@@ -80,7 +80,7 @@ func (s *S3Storage) getFilename(path string) string {
 }
 
 func (s *S3Storage) Save(ctx context.Context, obj *model.Poster, readyKey *string) (string, error) {
-	fmt.Println("HERE!")
+	log.Println("[S3]: Save triggered")
 	var key string
 	if readyKey == nil {
 		key = s.buildKey(s.prefix, obj.GetParent(), obj.GetFilename())

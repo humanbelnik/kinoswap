@@ -6,7 +6,7 @@ RPS_VALUES=($(seq 25 25 400))
 DURATION="3s"
 CONTAINER_NAME=embedder-app
 NCORES=2.0
-N=5
+N=100
 
 mkdir -p $OUT_DIR
 mkdir -p $OUT_DIR/grpc

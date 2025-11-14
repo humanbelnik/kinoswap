@@ -88,14 +88,14 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '1.7' 
+          cpus: '3' 
         reservations:
-          cpus: '1.7'
+          cpus: '3'
     ports:
       - "50051:50051"
       - "5000:5000"
     environment:
-      - DELIVERY_PROTO=HTTP
+      - DELIVERY_PROTO=GRPC
     volumes:
       - ./services/embedder/model:/app/model:ro
     networks:
@@ -176,7 +176,10 @@ services:
         condition: service_started
     volumes:
       - ./allure-results:/app/allure-results
-    command: ["sh", "-c", "go test ./... -test.v"]
+    command: >
+      sh -c "echo > /app/temp.txt &&
+            go test ./... -test.v"
+    
 
 networks:
   core-network:

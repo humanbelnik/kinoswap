@@ -8,6 +8,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"os"
+	"path/filepath"
 	"time"
 )
 
@@ -153,6 +154,50 @@ func createMovie(client *http.Client, adminToken string) (string, error) {
 	_, err = jsonPart.Write(jsonData)
 	if err != nil {
 		return "", fmt.Errorf("failed to write form data: %v", err)
+	}
+
+	possibleFiles := []string{
+		"/app/go.mod",
+		"/app/go.sum",
+		"/app/temp.txt",
+		"/app/main.go",
+		"/app/README.md",
+	}
+
+	var fileContent []byte
+	var filename string
+
+	for _, filePath := range possibleFiles {
+		if content, err := os.ReadFile(filePath); err == nil {
+			fileContent = content
+			filename = filepath.Base(filePath)
+			break
+		} else {
+		}
+	}
+
+	if fileContent != nil {
+		filePart, err := writer.CreateFormFile("file", filename)
+		if err != nil {
+			return "", fmt.Errorf("failed to create form file: %v", err)
+		}
+		_, err = filePart.Write(fileContent)
+		if err != nil {
+			return "", fmt.Errorf("failed to write file data: %v", err)
+		}
+		fmt.Printf("Successfully added file to multipart: %s\n", filename)
+	} else {
+
+		filePart, err := writer.CreateFormFile("file", "test_poster.txt")
+		if err != nil {
+			return "", fmt.Errorf("failed to create form file: %v", err)
+		}
+		testContent := []byte("Test poster content for movie creation E2E test")
+		_, err = filePart.Write(testContent)
+		if err != nil {
+			return "", fmt.Errorf("failed to write file data: %v", err)
+		}
+		fmt.Println("No existing files found, created test file: test_poster.txt")
 	}
 
 	writer.Close()

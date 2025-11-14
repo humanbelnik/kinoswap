@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - 'feature/**'
+      - 'benchmark'
   pull_request:
     branches: [ main, develop ]
 
@@ -133,11 +134,19 @@ jobs:
           ADMIN_SECRET=${{ secrets.ADMIN_SECRET }}
           EOF
 
-      - name: Start application
+
+      - name: Run E2E tests with mocked YandexS3
+        run: |
+          docker compose -f docker-compose.prod.yml build core-app
+          MOCKS3=true docker compose -f docker-compose.prod.yml run -d --rm core-app
+          docker compose -f docker-compose.prod.yml build e2e-tests
+          docker compose -f docker-compose.prod.yml run --rm e2e-tests
+          docker compose -f docker-compose.prod.yml down
+
+      - name: Run E2E tests with YandexS3
         run: |
           docker compose -f docker-compose.prod.yml build core-app
           docker compose -f docker-compose.prod.yml run -d --rm core-app
-
           docker compose -f docker-compose.prod.yml build e2e-tests
           docker compose -f docker-compose.prod.yml run --rm e2e-tests
 

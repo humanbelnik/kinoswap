@@ -50,11 +50,9 @@ def create_fixed_bins(data, bin_step_ms=150):
     min_latency = 0
     max_latency = 2000
     
-    # Создаем фиксированные бины с шагом 300ms
     max_bin = ((int(max_latency) // bin_step_ms) + 1) * bin_step_ms
     fixed_bins = list(range(0, int(max_bin) + bin_step_ms, bin_step_ms))
     
-    # Инициализируем счетчики для фиксированных бинов
     fixed_counts = [0] * (len(fixed_bins) - 1)
     
     for bin_value, count in zip(data['histogram_bins'], data['histogram_counts']):

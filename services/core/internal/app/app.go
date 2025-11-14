@@ -1,6 +1,7 @@
 package app
 
 import (
+	"log"
 	"os"
 
 	"github.com/humanbelnik/kinoswap/core/internal/config"
@@ -28,26 +29,35 @@ import (
 	usecase_vote "github.com/humanbelnik/kinoswap/core/internal/usecase/vote"
 )
 
-func Go(cfg *config.Config) {
-
-	redisConn := infra_redis_init.MustEstablishConn(cfg.Redis)
-	pgConn := infra_pg_init.MustEstablishConn(cfg.Postgres)
-	embedder := infra_embedder.MustEstablishConnection(cfg.Embedder)
-
+func resloveS3() usecase_movie.PosterRepository {
 	var posterRepository any
 	var err error
-	if os.Getenv("AWS_ACCESS_KEY_ID") == "" {
+
+	const mockS3 = "MOCKS3"
+	if os.Getenv(mockS3) != "" {
+		log.Println(mockS3, "set. using mock for yandexS3")
 		posterRepository = s3mock.New()
 	} else {
+		log.Println(mockS3, "not set. using real yandexS3")
 		s3conn := infra_s3.MustEstabilishConn()
 		posterRepository, err = infra_s3.New("hbk-test-bucket", s3conn, "poster/")
 		if err != nil {
 			panic(err)
 		}
 	}
+	if x, ok := posterRepository.(usecase_movie.PosterRepository); ok {
+		return x
+	}
+	panic("unable to cast s3 object")
+}
+
+func Go(cfg *config.Config) {
+	redisConn := infra_redis_init.MustEstablishConn(cfg.Redis)
+	pgConn := infra_pg_init.MustEstablishConn(cfg.Postgres)
+	embedder := infra_embedder.MustEstablishConnection(cfg.Embedder)
+	posterRepository := resloveS3()
 
 	embeddingReducer := embedding_reducer.New()
-
 	roomRepository := infra_postgres_room.New(pgConn)
 	voteRepo := infra_postgres_vote.New(pgConn)
 	movieRepository := infra_postgres_movie.New(pgConn)
@@ -57,7 +67,7 @@ func Go(cfg *config.Config) {
 	hub := ws_room.NewHub(roomUC)
 	go hub.Run()
 	voteUC := usecase_vote.New(voteRepo, roomUC)
-	movieUC := usecase_movie.New(movieRepository, posterRepository.(usecase_movie.PosterRepository), embedder, embeddingReducer)
+	movieUC := usecase_movie.New(movieRepository, posterRepository, embedder, embeddingReducer)
 
 	sessionCache := infra_session_cache.New(redisConn, "session_cache")
 	authService := servie_simple_auth.New(nil, sessionCache, nil)
