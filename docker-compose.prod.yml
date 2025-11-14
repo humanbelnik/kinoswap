@@ -81,9 +81,9 @@ services:
       - core-network
 
   embedder-app:
-    build:
-      context: ./services/embedder
-      dockerfile: Dockerfile.app
+    image: humanbelnik/kinoswap-embedder:latest    # build:
+    #   context: ./services/embedder
+    #   dockerfile: Dockerfile.app
     container_name: embedder-app
     deploy:
       resources:
