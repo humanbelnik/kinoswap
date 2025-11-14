@@ -75,7 +75,7 @@ func main() {
 func waitForService(client *http.Client) bool {
 	fmt.Println(" Waiting for service to be ready...")
 
-	maxRetries := 3
+	maxRetries := 10
 	for i := 0; i < maxRetries; i++ {
 		resp, err := client.Get(baseURL() + "/movies")
 		if err == nil {
