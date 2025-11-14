@@ -100,8 +100,8 @@ jobs:
 
   e2e-tests:
     runs-on: ubuntu-latest
-    needs: integration-tests
-    if: ${{ needs.integration-tests.result == 'success' }}
+    # needs: integration-tests
+    # if: ${{ needs.integration-tests.result == 'success' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
