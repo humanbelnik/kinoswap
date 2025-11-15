@@ -14,5 +14,5 @@ sniff-traffic:
 	sudo tshark -i any -Y "http and tcp.port==8080" -V
 
 pre-commit:
-	echo "triggered"
+	echo "trigger"
 	gocyclo -over 10 ./services/core
