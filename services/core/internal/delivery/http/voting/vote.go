@@ -299,7 +299,11 @@ func (c *Controller) vote(ctx *gin.Context) {
 		})
 		return
 	}
+	c.checkReady(ctx, roomID)
+	ctx.Status(http.StatusAccepted)
+}
 
+func (c *Controller) checkReady(ctx *gin.Context, roomID string) {
 	ready, err := c.uc.IsAllReady(ctx, roomID)
 	if err != nil {
 		c.logger.Error(err.Error())
@@ -312,6 +316,4 @@ func (c *Controller) vote(ctx *gin.Context) {
 	if ready {
 		c.hub.NotifyVotingComplete(roomID)
 	}
-
-	ctx.Status(http.StatusAccepted)
 }
