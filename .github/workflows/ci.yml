@@ -9,6 +9,33 @@ on:
     branches: [ main, develop ]
 
 jobs:
+  code-checks:
+    name: Linters & Cyclomatic complexity
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.25'
+
+      - name: Install dependencies
+        run: |
+          go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
+          go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+
+      - name: Run code complexity check
+        run: |
+          cd ./services/core
+          gocyclo -over 10 .
+
+      - name: Run linter
+        run: |
+          cd ./services/core
+          golangci-lint run ./...
+
   unit-tests:
     runs-on: ubuntu-latest
     steps:
