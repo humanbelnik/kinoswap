@@ -12,7 +12,3 @@ core-integration-tests-at-scale:
 
 sniff-traffic:
 	sudo tshark -i any -Y "http and tcp.port==8080" -V
-
-pre-commit:
-	echo "trigger"
-	gocyclo -over 10 ./services/core

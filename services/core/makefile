@@ -45,3 +45,8 @@ test-allure:
 	done
 	
 	allure generate $(ALLURE_RESULTS_DIR) -o $(ALLURE_REPORT_DIR) --clean
+
+pre-commit:
+	gocyclo -over 10 .
+	golangci-lint run ./...
+	
