@@ -19,6 +19,7 @@ func TestIntegrationSuite(t *testing.T) {
 	suite.RunSuite(t, new(E2EMovieFlowSuite))
 }
 func (s *E2EMovieFlowSuite) TestIntegrationUpload(t provider.T) {
+	t.Assert().NoError(nil)
 	fmt.Println("Starting E2E tests for Kinoswap API...")
 	client := &http.Client{
 		Timeout: 30 * time.Second,

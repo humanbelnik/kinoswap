@@ -5,14 +5,16 @@ IMG_DIR=img
 LOAD_START=25
 LOAD_END=1000
 LOAD_STEP=25
-LOAD_STEP_DURATION=3s
+LOAD_STEP_DURATION=60s
 
-N=3
-
+N=1
+NCORES=1.0
 mkdir -p $OUT_DIR
 mkdir -p $IMG_DIR
 
-RPS_LEVELS=(50 100 250 500)
+RPS_LEVELS=(1000)
+
+
 for RPS in "${RPS_LEVELS[@]}"; do
   echo "start with RPS_LEVEL=$RPS"
   
@@ -32,8 +34,8 @@ for RPS in "${RPS_LEVELS[@]}"; do
 
       python3 grpc_parse_ghz_summary.py $OUT.txt $OUT.json
   done
+
+
   python3 step_result_reducer.py grpc $RPS ./out/grpc_rps_${RPS}_reduced.json
   python3 plotter.py ./out/grpc_rps_${RPS}_reduced.json  ./img/grpc_rps_${RPS}_hist.png ${RPS}
 done
-
-

@@ -2,11 +2,11 @@
 
 OUT_DIR=increase_rps_out
 IMG_DIR=img
-RPS_VALUES=($(seq 25 25 400))
-DURATION="3s"
+RPS_VALUES=(500)
+DURATION="60s"
 CONTAINER_NAME=embedder-app
-NCORES=2.0
-N=100
+NCORES=1.0
+N=1
 
 mkdir -p $OUT_DIR
 mkdir -p $OUT_DIR/grpc
