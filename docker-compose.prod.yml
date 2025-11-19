@@ -85,12 +85,7 @@ services:
     #   context: ./services/embedder
     #   dockerfile: Dockerfile.app
     container_name: embedder-app
-    # deploy:
-    #   resources:
-    #     limits:
-    #       cpus: '0.8' 
-    #     reservations:
-    #       cpus: '1'
+
     ports:
       - "50051:50051"
       - "5000:5000"
