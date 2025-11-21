@@ -129,6 +129,7 @@ func (b *MovieBuilder) WithPoster(ctx context.Context) *MovieBuilder {
 				Content:  b.movie.Poster.Content,
 				MovieID:  b.movie.Poster.MovieID,
 			}, &strID)
+			//lol
 			if err != nil {
 				return errors.Join(ErrInternal, err)
 			}
