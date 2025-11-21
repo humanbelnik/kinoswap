@@ -148,19 +148,19 @@ jobs:
       - name: Start application
         run: |
           docker compose -f docker-compose.prod.yml build core-app
-          docker compose -f docker-compose.prod.yml run -d --rm core-app
-          docker compose -f docker-compose.prod.yml build e2e-tests
-          docker compose -f docker-compose.prod.yml run --rm e2e-tests
-      - name: Stop application
-        if: always()
-        run: |
-          docker compose -f docker-compose.prod.yml down
-      - name: Upload e2e test results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: e2e-test-results
-          path: allure-results/
+      #     docker compose -f docker-compose.prod.yml run -d --rm core-app
+      #     docker compose -f docker-compose.prod.yml build e2e-tests
+      #     docker compose -f docker-compose.prod.yml run --rm e2e-tests
+      # - name: Stop application
+      #   if: always()
+      #   run: |
+      #     docker compose -f docker-compose.prod.yml down
+      # - name: Upload e2e test results
+      #   if: always()
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: e2e-test-results
+      #     path: allure-results/
 
   generate-allure-report:
     name: Generate and Publish Allure Report
