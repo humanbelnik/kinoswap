@@ -1,0 +1,35 @@
+run:
+  timeout: 5m
+  modules-download-mode: readonly
+
+linters-settings:
+  gocyclo:
+    min-complexity: 10
+  funlen:
+    lines: 100
+    statements: 50
+  goconst:
+    min-len: 2
+    min-occurrences: 3
+  gocritic:
+    enabled-tags:
+      - performance
+      - style
+      - experimental
+  govet:
+    shadow: true
+
+  maintidx:
+    under: 80
+
+
+linters:
+  disable-all: true
+  enable:
+    - goimports
+    - staticcheck
+    - gocyclo
+  
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
