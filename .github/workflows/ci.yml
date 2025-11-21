@@ -1,10 +1,7 @@
-name: CI
-
 on:
   push:
     branches:
       - 'feature/**'
-      - 'benchmark'
   pull_request:
     branches: [ main, develop ]
 
@@ -58,12 +55,10 @@ jobs:
           AWS_S3_ENDPOINT=${{ secrets.AWS_S3_ENDPOINT }}
           ADMIN_SECRET=${{ secrets.ADMIN_SECRET }}
           EOF
-
       - name: Run unit tests
         run: |
           docker compose -f docker-compose.prod.yml build core-unit-tests
           docker compose -f docker-compose.prod.yml run --rm core-unit-tests
-
       - name: Upload unit test results
         if: always()
         uses: actions/upload-artifact@v4
@@ -87,18 +82,15 @@ jobs:
           cat << EOF > .env
           HTTP_HOST=${{ secrets.HTTP_HOST }}
           REDIS_HOST=${{ secrets.REDIS_HOST }}
-
           DB_HOST=${{ secrets.DB_HOST }}
           DB_PORT=${{ secrets.DB_PORT }}
           DB_USER=${{ secrets.DB_USER }}
           DB_PASSWORD=${{ secrets.DB_PASSWORD }}
           DB_NAME=${{ secrets.DB_NAME }}
           DB_SSLMODE=${{ secrets.DB_SSLMODE }}
-
           POSTGRES_USER=${{ secrets.POSTGRES_USER }}
           POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
           POSTGRES_DB=${{ secrets.POSTGRES_DB }}
-
           AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_REGION=${{ secrets.AWS_REGION }}
@@ -106,18 +98,14 @@ jobs:
           AWS_S3_ENDPOINT=${{ secrets.AWS_S3_ENDPOINT }}
           ADMIN_SECRET=${{ secrets.ADMIN_SECRET }}
           EOF
-
       - name: Run integration tests
         run: |
           docker compose -f docker-compose.prod.yml build core-postgres
           docker compose -f docker-compose.prod.yml run -d --rm core-postgres
-
           docker compose -f docker-compose.prod.yml build core-migrate
           docker compose -f docker-compose.prod.yml run --rm core-migrate
-
           docker compose -f docker-compose.prod.yml build core-integration-tests
           docker compose -f docker-compose.prod.yml run --rm core-integration-tests
-
       - name: Upload integration test results
         if: always()
         uses: actions/upload-artifact@v4
@@ -157,28 +145,16 @@ jobs:
           AWS_S3_ENDPOINT=${{ secrets.AWS_S3_ENDPOINT }}
           ADMIN_SECRET=${{ secrets.ADMIN_SECRET }}
           EOF
-
-      - name: Run true YandexS3
+      - name: Start application
         run: |
           docker compose -f docker-compose.prod.yml build core-app
-          docker compose -f docker-compose.prod.yml down
-         # docker compose -f docker-compose.prod.yml run -d --rm core-app
-          #docker compose -f docker-compose.prod.yml build e2e-tests
-          #docker compose -f docker-compose.prod.yml run --rm e2e-tests
-          #docker compose -f docker-compose.prod.yml down
-
-      # - name: Run true YandexS3
-      #   run: |
-      #     docker compose -f docker-compose.prod.yml build core-app
-      #     MOCKS3=true docker compose -f docker-compose.prod.yml run -d --rm core-app
-      #     docker compose -f docker-compose.prod.yml build e2e-tests
-      #     docker compose -f docker-compose.prod.yml run --rm e2e-tests
-
+          docker compose -f docker-compose.prod.yml run -d --rm core-app
+          docker compose -f docker-compose.prod.yml build e2e-tests
+          docker compose -f docker-compose.prod.yml run --rm e2e-tests
       - name: Stop application
         if: always()
         run: |
           docker compose -f docker-compose.prod.yml down
-
       - name: Upload e2e test results
         if: always()
         uses: actions/upload-artifact@v4
@@ -228,32 +204,26 @@ jobs:
           wget -q -O allure-2.27.0.tgz https://github.com/allure-framework/allure2/releases/download/2.27.0/allure-2.27.0.tgz
           sudo tar -zxvf allure-2.27.0.tgz -C /opt/
           sudo ln -sf /opt/allure-2.27.0/bin/allure /usr/bin/allure
-
       - name: Prepare results with history
         run: |
           mkdir -p combined-results
           cp -r allure-results/* combined-results/
-
           if [ -d "gh-pages/history" ]; then
             echo "Restoring history from gh-pages"
             mkdir -p combined-results/history
             cp -r gh-pages/history/* combined-results/history/
           fi
-
       - name: Generate Allure Report
         run: |
           allure generate combined-results -o allure-report --clean
-
       - name: Prepare gh-pages content
         run: |
           rm -rf gh-pages/*
           cp -r allure-report/* gh-pages/
-
       - name: Setup Git config
         run: |
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
-
       - name: Deploy to GitHub Pages
         if: always()
         uses: peaceiris/actions-gh-pages@v4
