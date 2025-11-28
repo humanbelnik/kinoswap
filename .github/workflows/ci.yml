@@ -146,14 +146,20 @@ jobs:
           AWS_S3_ENDPOINT=${{ secrets.AWS_S3_ENDPOINT }}
           ADMIN_SECRET=${{ secrets.ADMIN_SECRET }}
           EOF
-      - name: Start application
+      - name: Test with mock
         run: |
-          
           docker compose -f docker-compose.prod.yml up -d  mock-s3-server
-          
           S3_CLIENT_TYPE=mock docker compose -f docker-compose.prod.yml up -d core-app
-          
           ENV=CI docker compose -f docker-compose.prod.yml up  e2e-tests
+          docker compose -f docker-compose.prod.yml down
+
+      - name: Test with real S3
+        run: |
+          docker compose -f docker-compose.prod.yml up -d  mock-s3-server
+          S3_CLIENT_TYPE=real docker compose -f docker-compose.prod.yml up -d core-app
+          ENV=CI docker compose -f docker-compose.prod.yml up  e2e-tests
+          docker compose -f docker-compose.prod.yml down
+
       - name: Stop application
         if: always()
         run: |

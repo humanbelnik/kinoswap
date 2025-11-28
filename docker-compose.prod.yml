@@ -274,8 +274,7 @@ services:
     networks:
       - core-network
     environment:
-      - ALLURE_OUTPUT_PATH=/app
-      - ENV=CI
+      - ALLURE_OUTPUT_PATH: /app
     depends_on:
       core-app:
         condition: service_started
