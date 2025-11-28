@@ -16,6 +16,8 @@ linters-settings:
       - performance
       - style
       - experimental
+      - errcheck
+      
   govet:
     shadow: true
 
@@ -29,7 +31,7 @@ linters:
     - goimports
     - staticcheck
     - gocyclo
-  
+    - errcheck
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0

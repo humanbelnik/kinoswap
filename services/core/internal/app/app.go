@@ -1,9 +1,6 @@
 package app
 
 import (
-	"log"
-	"os"
-
 	"github.com/humanbelnik/kinoswap/core/internal/config"
 	http_auth "github.com/humanbelnik/kinoswap/core/internal/delivery/http/auth"
 	http_init "github.com/humanbelnik/kinoswap/core/internal/delivery/http/init"
@@ -21,7 +18,6 @@ import (
 	infra_redis_init "github.com/humanbelnik/kinoswap/core/internal/infra/redis/init"
 	infra_session_cache "github.com/humanbelnik/kinoswap/core/internal/infra/redis/session"
 	infra_s3 "github.com/humanbelnik/kinoswap/core/internal/infra/s3"
-	"github.com/humanbelnik/kinoswap/core/internal/infra/s3mock"
 	servie_simple_auth "github.com/humanbelnik/kinoswap/core/internal/service/auth/simple"
 	"github.com/humanbelnik/kinoswap/core/internal/service/embedding_reducer"
 	usecase_movie "github.com/humanbelnik/kinoswap/core/internal/usecase/movie"
@@ -33,18 +29,12 @@ func resloveS3() usecase_movie.PosterRepository {
 	var posterRepository any
 	var err error
 
-	const mockS3 = "MOCKS3"
-	if os.Getenv(mockS3) != "" {
-		log.Println(mockS3, "set. using mock for yandexS3")
-		posterRepository = s3mock.New()
-	} else {
-		log.Println(mockS3, "not set. using real yandexS3")
-		s3conn := infra_s3.MustEstabilishConn()
-		posterRepository, err = infra_s3.New("hbk-test-bucket", s3conn, "poster/")
-		if err != nil {
-			panic(err)
-		}
+	s3conn := infra_s3.MustEstablishConn()
+	posterRepository, err = infra_s3.New("hbk-test-bucket", s3conn, "poster/")
+	if err != nil {
+		panic(err)
 	}
+
 	if x, ok := posterRepository.(usecase_movie.PosterRepository); ok {
 		return x
 	}

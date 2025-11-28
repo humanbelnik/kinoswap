@@ -167,7 +167,7 @@ func (d *Driver) AddReactions(ctx context.Context, roomID uuid.UUID, userID uuid
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	var voted bool
 	checkParticipantQuery := `
@@ -188,20 +188,8 @@ func (d *Driver) AddReactions(ctx context.Context, roomID uuid.UUID, userID uuid
 		return nil
 	}
 
-	for movieID, reaction := range reactions {
-		if reaction == 1 {
-			upsertQuery := `
-				INSERT INTO reactions (id, room_id, movie_id, likes) 
-				VALUES ($1, $2, $3, $4)
-				ON CONFLICT (room_id, movie_id) 
-				DO UPDATE SET likes = reactions.likes + EXCLUDED.likes
-			`
-
-			_, err = tx.ExecContext(ctx, upsertQuery, uuid.New(), roomID, movieID, 1)
-			if err != nil {
-				return err
-			}
-		}
+	if err := d.insertReactions(ctx, reactions, tx, roomID); err != nil {
+		return err
 	}
 
 	updateVotedQuery := `
@@ -226,6 +214,25 @@ func (d *Driver) AddReactions(ctx context.Context, roomID uuid.UUID, userID uuid
 		return err
 	}
 	return tx.Commit()
+}
+
+func (d *Driver) insertReactions(ctx context.Context, reactions map[uuid.UUID]int, tx *sqlx.Tx, roomID uuid.UUID) error {
+	for movieID, reaction := range reactions {
+		if reaction == 1 {
+			upsertQuery := `
+				INSERT INTO reactions (id, room_id, movie_id, likes) 
+				VALUES ($1, $2, $3, $4)
+				ON CONFLICT (room_id, movie_id) 
+				DO UPDATE SET likes = reactions.likes + EXCLUDED.likes
+			`
+
+			_, err := tx.ExecContext(ctx, upsertQuery, uuid.New(), roomID, movieID, 1)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func (d *Driver) IsAllReady(ctx context.Context, roomID uuid.UUID) (bool, error) {
