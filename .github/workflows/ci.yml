@@ -149,11 +149,11 @@ jobs:
       - name: Start application
         run: |
           
-          docker compose -f docker-compose.prod.yml up -d --rm mock-s3-server
+          docker compose -f docker-compose.prod.yml up -d  mock-s3-server
           
-          S3_CLIENT_TYPE=mock docker compose -f docker-compose.prod.yml up -d --rm core-app
+          S3_CLIENT_TYPE=mock docker compose -f docker-compose.prod.yml up -d core-app
           
-          ENV=CI docker compose -f docker-compose.prod.yml up --rm e2e-tests
+          ENV=CI docker compose -f docker-compose.prod.yml up  e2e-tests
       - name: Stop application
         if: always()
         run: |
