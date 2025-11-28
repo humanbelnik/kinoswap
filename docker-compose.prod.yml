@@ -34,6 +34,7 @@ services:
     networks:
       - core-network
 
+
   core-app-ro1:
     build:
       context: ./services/core
@@ -274,7 +275,8 @@ services:
     networks:
       - core-network
     environment:
-      - ALLURE_OUTPUT_PATH: /app
+      - ALLURE_OUTPUT_PATH=/app
+      - ENV=CI
     depends_on:
       core-app:
         condition: service_started
