@@ -2,6 +2,7 @@ on:
   push:
     branches:
       - 'feature/**'
+      - '**'
   pull_request:
     branches: [ main, develop ]
 
@@ -147,12 +148,12 @@ jobs:
           EOF
       - name: Start application
         run: |
-          docker compose -f docker-compose.prod.yml build mock-s3-server
-          docker compose -f docker-compose.prod.yml run -d --rm mock-s3-server
-          docker compose -f docker-compose.prod.yml build core-app
-          S3_CLIENT_TYPE=mock docker compose -f docker-compose.prod.yml run -d --rm core-app
-          docker compose -f docker-compose.prod.yml build e2e-tests
-          docker compose -f docker-compose.prod.yml run --rm e2e-tests
+          
+          docker compose -f docker-compose.prod.yml up -d --rm mock-s3-server
+          
+          S3_CLIENT_TYPE=mock docker compose -f docker-compose.prod.yml up -d --rm core-app
+          
+          ENV=CI docker compose -f docker-compose.prod.yml up --rm e2e-tests
       - name: Stop application
         if: always()
         run: |
