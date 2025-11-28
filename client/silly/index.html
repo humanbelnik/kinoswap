@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kinoswap</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; background: #f5f5f5; padding: 20px; }
+        .container { max-width: 800px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        h1 { text-align: center; margin-bottom: 20px; color: #333; }
+        .section { margin-bottom: 30px; padding: 20px; border: 1px solid #ddd; border-radius: 5px; }
+        .section h2 { margin-bottom: 15px; color: #555; }
+        input, textarea, button { width: 100%; padding: 10px; margin: 5px 0; border: 1px solid #ddd; border-radius: 4px; }
+        button { background: #007bff; color: white; border: none; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 4px; }
+        .success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .info { background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+        .movie { border: 1px solid #ddd; padding: 15px; margin: 10px 0; border-radius: 5px; }
+        .reaction-btn { width: auto; margin: 0 5px; }
+        .results { margin-top: 20px; }
+        .hidden { display: none; }
+        .nav { display: flex; justify-content: center; margin-bottom: 20px; }
+        .nav button { width: auto; margin: 0 10px; }
+        .page { display: none; }
+        .active { display: block; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Kinoswap</h1>
+        
+        <div class="nav">
+            <button onclick="showPage('user-page')">Пользователь</button>
+            <button onclick="showPage('admin-page')">Админ</button>
+        </div>
+
+        <!-- Страница пользователя -->
+        <div id="user-page" class="page active">
+            <!-- Создание комнаты -->
+            <div class="section">
+                <h2>Создать комнату</h2>
+                <button onclick="createRoom()">Создать комнату</button>
+                <div id="room-info" class="hidden">
+                    <p>Код комнаты: <span id="room-code"></span></p>
+                    <p>Токен: <span id="owner-token"></span></p>
+                    <textarea id="owner-prefs" placeholder="Ваши предпочтения (например: horror)"></textarea>
+                    <button onclick="ownerParticipate()">Присоединиться как владелец</button>
+                    <button onclick="startVoting()" id="start-voting-btn" disabled>Начать голосование</button>
+                </div>
+            </div>
+
+            <!-- Присоединение к комнате -->
+            <div class="section">
+                <h2>Присоединиться к комнате</h2>
+                <input type="text" id="participant-room-code" placeholder="Код комнаты">
+                <textarea id="participant-prefs" placeholder="Ваши предпочтения"></textarea>
+                <button onclick="participantJoin()">Присоединиться</button>
+                <div id="participant-info" class="hidden">
+                    <p>Токен: <span id="participant-token"></span></p>
+                </div>
+            </div>
+
+            <!-- Голосование -->
+            <div id="voting-section" class="section hidden">
+                <h2>Голосование</h2>
+                <div id="movies-list"></div>
+                <button onclick="submitVote()">Отправить голос</button>
+            </div>
+
+            <!-- Результаты -->
+            <div id="results-section" class="section hidden">
+                <h2>Результаты голосования</h2>
+                <div id="results-list"></div>
+            </div>
+        </div>
+
+        <!-- Страница админа -->
+        <div id="admin-page" class="page">
+            <div class="section">
+                <h2>Аутентификация администратора</h2>
+                <input type="password" id="admin-code" placeholder="Код администратора">
+                <button onclick="adminAuth()">Войти</button>
+                <div id="admin-info" class="hidden">
+                    <p>Токен администратора: <span id="admin-token"></span></p>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>Добавить фильм</h2>
+                <input type="text" id="movie-title" placeholder="Название фильма">
+                <input type="number" id="movie-year" placeholder="Год выпуска">
+                <input type="number" step="0.1" id="movie-rating" placeholder="Рейтинг">
+                <input type="text" id="movie-genres" placeholder="Жанры (через запятую)">
+                <textarea id="movie-overview" placeholder="Описание"></textarea>
+                <button onclick="addMovie()" id="add-movie-btn" disabled>Добавить фильм</button>
+            </div>
+
+            <div class="section">
+                <h2>Список фильмов</h2>
+                <button onclick="viewMovies()" id="view-movies-btn" disabled>Просмотреть фильмы</button>
+                <div id="movies-admin-list"></div>
+            </div>
+        </div>
+
+        <!-- Статус -->
+        <div id="status" class="status"></div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8080/api/v1';
+        let roomCode = '';
+        let ownerToken = '';
+        let participantToken = '';
+        let adminToken = '';
+        let ownerWs = null;
+        let participantWs = null;
+
+        function showPage(pageId) {
+            document.querySelectorAll('.page').forEach(page => page.classList.remove('active'));
+            document.getElementById(pageId).classList.add('active');
+        }
+
+        function showStatus(message, type = 'info') {
+            const statusEl = document.getElementById('status');
+            statusEl.textContent = message;
+            statusEl.className = `status ${type}`;
+            statusEl.classList.remove('hidden');
+        }
+
+        function hideStatus() {
+            document.getElementById('status').classList.add('hidden');
+        }
+
+        // WebSocket подключение
+        function connectWebSocket(token, isOwner = false) {
+            const ws = new WebSocket(`ws://localhost:8080/api/v1/ws/rooms/${roomCode}?token=${encodeURIComponent(token)}`);
+            
+            ws.onopen = () => {
+                showStatus('WebSocket подключен', 'success');
+                if (isOwner) {
+                    document.getElementById('start-voting-btn').disabled = false;
+                }
+            };
+            
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                console.log('WebSocket сообщение:', data);
+                
+                if (data.type === 'LOBBY_UPDATE') {
+                    showStatus(`Участников в комнате: ${data.payload.participants_count}`, 'info');
+                }
+                
+                if (data.type === 'REDIRECT_TO_VOTING') {
+                    showStatus('Начинается голосование!', 'success');
+                    startVotingProcess();
+                }
+                
+                if (data.type === 'VOTING_FINISHED') {
+                    showStatus('Все участники проголосовали!', 'success');
+                    showResults();
+                }
+            };
+            
+            ws.onerror = (error) => {
+                showStatus(`WebSocket ошибка: ${error}`, 'error');
+            };
+
+            return ws;
+        }
+
+        // Создание комнаты
+        async function createRoom() {
+            try {
+                const response = await fetch(`${API_BASE}/rooms`, {
+                    method: 'POST'
+                });
+                
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                
+                const data = await response.json();
+                roomCode = data.room_code;
+                ownerToken = response.headers.get('X-user-token');
+                
+                document.getElementById('room-code').textContent = roomCode;
+                document.getElementById('owner-token').textContent = ownerToken;
+                document.getElementById('room-info').classList.remove('hidden');
+                document.getElementById('participant-room-code').value = roomCode;
+                
+                showStatus(`Комната создана! Код: ${roomCode}`, 'success');
+                
+            } catch (error) {
+                showStatus(`Ошибка создания комнаты: ${error.message}`, 'error');
+            }
+        }
+
+        // Владелец присоединяется к комнате
+        async function ownerParticipate() {
+            if (!roomCode || !ownerToken) return;
+            
+            try {
+                const prefsText = document.getElementById('owner-prefs').value.trim();
+                const preference = { text: prefsText || "horror" };
+                
+                const requestBody = { preference: preference };
+                console.log('Отправка предпочтений владельца:', requestBody);
+                
+                const response = await fetch(`${API_BASE}/rooms/${roomCode}/participations`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-user-token': ownerToken
+                    },
+                    body: JSON.stringify(requestBody)
+                });
+                
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                
+                // Автоматическое подключение WebSocket
+                ownerWs = connectWebSocket(ownerToken, true);
+                showStatus('Владелец присоединился к комнате', 'success');
+                
+            } catch (error) {
+                showStatus(`Ошибка присоединения владельца: ${error.message}`, 'error');
+            }
+        }
+
+        // Участник присоединяется к комнате
+        async function participantJoin() {
+            const partRoomCode = document.getElementById('participant-room-code').value;
+            if (!partRoomCode) {
+                showStatus('Введите код комнаты', 'error');
+                return;
+            }
+            
+            try {
+                const prefsText = document.getElementById('participant-prefs').value.trim();
+                const preference = { text: prefsText || "comedy" };
+                
+                const requestBody = { preference: preference };
+                console.log('Отправка предпочтений участника:', requestBody);
+                
+                const response = await fetch(`${API_BASE}/rooms/${partRoomCode}/participations`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(requestBody)
+                });
+                
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                
+                participantToken = response.headers.get('X-user-token');
+                roomCode = partRoomCode;
+                
+                document.getElementById('participant-token').textContent = participantToken;
+                document.getElementById('participant-info').classList.remove('hidden');
+                
+                // Автоматическое подключение WebSocket
+                participantWs = connectWebSocket(participantToken);
+                showStatus('Участник присоединился к комнате', 'success');
+                
+            } catch (error) {
+                showStatus(`Ошибка присоединения участника: ${error.message}`, 'error');
+            }
+        }
+
+        // Начать голосование
+        function startVoting() {
+            if (!ownerWs || ownerWs.readyState !== WebSocket.OPEN) {
+                showStatus('WebSocket не подключен', 'error');
+                return;
+            }
+            
+            ownerWs.send(JSON.stringify({
+                type: 'START_VOTING'
+            }));
+            
+            showStatus('Владелец запускает голосование...', 'success');
+        }
+
+        // Процесс голосования
+        async function startVotingProcess() {
+            try {
+                const token = ownerToken || participantToken;
+                console.log('Получение фильмов для комнаты:', roomCode, 'с токеном:', token);
+                
+                const response = await fetch(`${API_BASE}/rooms/${roomCode}/movies?count=5`, {
+                    headers: {
+                        'X-user-token': token
+                    }
+                });
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${errorText}`);
+                }
+                
+                const data = await response.json();
+                console.log('Получены фильмы:', data);
+                
+                if (!data.movies || data.movies.length === 0) {
+                    showStatus('Нет фильмов для голосования', 'error');
+                    return;
+                }
+                
+                displayMovies(data.movies);
+                
+            } catch (error) {
+                showStatus(`Ошибка начала голосования: ${error.message}`, 'error');
+            }
+        }
+
+        // Отображение фильмов для голосования
+        function displayMovies(movies) {
+            const moviesList = document.getElementById('movies-list');
+            moviesList.innerHTML = '';
+            
+            movies.forEach((movie, index) => {
+                const movieEl = document.createElement('div');
+                movieEl.className = 'movie';
+                
+                // Безопасное отображение данных
+                const title = movie.title || 'Без названия';
+                const year = movie.year || 'Неизвестно';
+                const rating = movie.rating || 'Нет';
+                const genres = Array.isArray(movie.genres) ? movie.genres.join(', ') : 'Не указаны';
+                const overview = movie.overview || 'Нет описания';
+                
+                movieEl.innerHTML = `
+                    <h3>${title} (${year})</h3>
+                    <p>Рейтинг: ${rating}</p>
+                    <p>Жанры: ${genres}</p>
+                    <p>${overview}</p>
+                    <div>
+                        <button class="reaction-btn" onclick="setReaction('${movie.id}', 0)">Не нравится</button>
+                        <button class="reaction-btn" onclick="setReaction('${movie.id}', 1)">Нравится</button>
+                    </div>
+                `;
+                moviesList.appendChild(movieEl);
+            });
+            
+            document.getElementById('voting-section').classList.remove('hidden');
+        }
+
+        // Установка реакции
+        function setReaction(movieId, reaction) {
+            const reactions = JSON.parse(localStorage.getItem('reactions') || '{}');
+            reactions[movieId] = reaction;
+            localStorage.setItem('reactions', JSON.stringify(reactions));
+        }
+
+        // Отправка голоса
+        async function submitVote() {
+            try {
+                const reactions = JSON.parse(localStorage.getItem('reactions') || '{}');
+                const token = ownerToken || participantToken;
+                
+                console.log('Отправка голосов:', reactions);
+                
+                const response = await fetch(`${API_BASE}/rooms/${roomCode}/results`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-user-token': token
+                    },
+                    body: JSON.stringify({ reactions })
+                });
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${errorText}`);
+                }
+                
+                showStatus('Ваш голос принят!', 'success');
+                localStorage.removeItem('reactions');
+                document.getElementById('voting-section').classList.add('hidden');
+                
+            } catch (error) {
+                showStatus(`Ошибка отправки голоса: ${error.message}`, 'error');
+            }
+        }
+
+        // Показать результаты
+        async function showResults() {
+            try {
+                const token = ownerToken || participantToken;
+                const response = await fetch(`${API_BASE}/rooms/${roomCode}/results`, {
+                    headers: {
+                        'X-user-token': token
+                    }
+                });
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${errorText}`);
+                }
+                
+                const data = await response.json();
+                displayResults(data.results);
+                
+            } catch (error) {
+                showStatus(`Ошибка получения результатов: ${error.message}`, 'error');
+            }
+        }
+
+        // Отображение результатов
+        function displayResults(results) {
+            const resultsList = document.getElementById('results-list');
+            resultsList.innerHTML = '';
+            
+            if (!results || results.length === 0) {
+                resultsList.innerHTML = '<p>Нет результатов для отображения</p>';
+                return;
+            }
+            
+            results.sort((a, b) => (b.likes || 0) - (a.likes || 0)).forEach((result, index) => {
+                const resultEl = document.createElement('div');
+                resultEl.className = 'movie';
+                
+                // Безопасное отображение данных
+                const title = result.mm?.title || 'Без названия';
+                const year = result.mm?.year || 'Неизвестно';
+                const rating = result.mm?.rating || 'Нет';
+                const genres = Array.isArray(result.mm?.genres) ? result.mm.genres.join(', ') : 'Не указаны';
+                const overview = result.mm?.overview || 'Нет описания';
+                const likes = result.likes || 0;
+                
+                resultEl.innerHTML = `
+                    <h3>${index + 1}. ${title} (${year}) - ${likes} голосов</h3>
+                    <p>Рейтинг: ${rating}</p>
+                    <p>Жанры: ${genres}</p>
+                    <p>${overview}</p>
+                `;
+                resultsList.appendChild(resultEl);
+            });
+            
+            document.getElementById('results-section').classList.remove('hidden');
+        }
+
+        // Аутентификация администратора
+        async function adminAuth() {
+            try {
+                const code = document.getElementById('admin-code').value;
+                if (!code) {
+                    showStatus('Введите код администратора', 'error');
+                    return;
+                }
+                
+                const requestBody = { code: code };
+                console.log('Отправка кода администратора:', requestBody);
+                
+                const response = await fetch(`${API_BASE}/auth`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(requestBody)
+                });
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${errorText}`);
+                }
+                
+                // Получаем токен из заголовка
+                adminToken = response.headers.get('X-admin-token');
+                console.log('Получен токен администратора:', adminToken);
+                
+                if (!adminToken) {
+                    // Пробуем получить из другого заголовка
+                    adminToken = response.headers.get('x-admin-token');
+                    console.log('Попытка получить из x-admin-token:', adminToken);
+                }
+                
+                if (!adminToken) {
+                    // Читаем все заголовки для отладки
+                    const headers = {};
+                    response.headers.forEach((value, key) => {
+                        headers[key] = value;
+                    });
+                    console.log('Все заголовки ответа:', headers);
+                    throw new Error('Токен администратора не получен. Заголовки: ' + JSON.stringify(headers));
+                }
+                
+                document.getElementById('admin-token').textContent = adminToken;
+                document.getElementById('admin-info').classList.remove('hidden');
+                document.getElementById('add-movie-btn').disabled = false;
+                document.getElementById('view-movies-btn').disabled = false;
+                
+                showStatus('Аутентификация администратора успешна!', 'success');
+                
+            } catch (error) {
+                showStatus(`Ошибка аутентификации: ${error.message}`, 'error');
+            }
+        }
+
+        // Добавление фильма
+        async function addMovie() {
+            if (!adminToken) {
+                showStatus('Сначала выполните аутентификацию', 'error');
+                return;
+            }
+            
+            try {
+                const title = document.getElementById('movie-title').value;
+                const year = document.getElementById('movie-year').value;
+                const rating = document.getElementById('movie-rating').value;
+                const genres = document.getElementById('movie-genres').value;
+                const overview = document.getElementById('movie-overview').value;
+                
+                if (!title || !year || !rating || !genres || !overview) {
+                    showStatus('Заполните все поля', 'error');
+                    return;
+                }
+                
+                const movieData = {
+                    title: title,
+                    year: parseInt(year),
+                    rating: parseFloat(rating),
+                    genres: genres.split(',').map(g => g.trim()),
+                    overview: overview
+                };
+                
+                console.log('Добавление фильма:', movieData);
+                
+                // Создаем FormData для multipart запроса
+                const formData = new FormData();
+                formData.append('body', JSON.stringify(movieData));
+                
+                const response = await fetch(`${API_BASE}/movies`, {
+                    method: 'POST',
+                    headers: {
+                        'X-admin-token': adminToken
+                    },
+                    body: formData
+                });
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${errorText}`);
+                }
+                
+                // Очистка формы
+                document.getElementById('movie-title').value = '';
+                document.getElementById('movie-year').value = '';
+                document.getElementById('movie-rating').value = '';
+                document.getElementById('movie-genres').value = '';
+                document.getElementById('movie-overview').value = '';
+                
+                showStatus('Фильм успешно добавлен!', 'success');
+                
+            } catch (error) {
+                showStatus(`Ошибка добавления фильма: ${error.message}`, 'error');
+            }
+        }
+
+        // Просмотр фильмов
+        async function viewMovies() {
+            if (!adminToken) {
+                showStatus('Сначала выполните аутентификацию', 'error');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_BASE}/movies`, {
+                    headers: {
+                        'X-admin-token': adminToken
+                    }
+                });
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${errorText}`);
+                }
+                
+                const data = await response.json();
+                console.log('Получены фильмы для админа:', data);
+                displayAdminMovies(data.movies);
+                
+            } catch (error) {
+                showStatus(`Ошибка получения фильмов: ${error.message}`, 'error');
+            }
+        }
+
+        // Отображение фильмов для админа
+        function displayAdminMovies(movies) {
+            const moviesList = document.getElementById('movies-admin-list');
+            moviesList.innerHTML = '';
+            
+            if (!movies || movies.length === 0) {
+                moviesList.innerHTML = '<p>Нет фильмов</p>';
+                return;
+            }
+            
+            movies.forEach((movie, index) => {
+                const movieEl = document.createElement('div');
+                movieEl.className = 'movie';
+                
+                // Безопасное отображение данных
+                const title = movie.title || 'Без названия';
+                const year = movie.year || 'Неизвестно';
+                const rating = movie.rating || 'Нет';
+                const genres = Array.isArray(movie.genres) ? movie.genres.join(', ') : 'Не указаны';
+                const overview = movie.overview || 'Нет описания';
+                const poster = movie.poster_link || '';
+                
+                movieEl.innerHTML = `
+                    <h3>${title} (${year})</h3>
+                    <p>Рейтинг: ${rating}</p>
+                    <p>Жанры: ${genres}</p>
+                    <p>${overview}</p>
+                    ${poster ? `<p>Постер: ${poster}</p>` : ''}
+                `;
+                moviesList.appendChild(movieEl);
+            });
+        }
+
+        // Автозаполнение примеров
+        document.getElementById('owner-prefs').value = 'horror';
+        document.getElementById('participant-prefs').value = 'comedy';
+    </script>
+</body>
+</html>

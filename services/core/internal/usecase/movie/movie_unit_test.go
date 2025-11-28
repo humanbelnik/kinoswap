@@ -1,4 +1,5 @@
-////go:build unit
+//go:build !integration
+// +build !integration
 
 package usecase_movie
 

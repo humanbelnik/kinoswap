@@ -1,12 +1,9 @@
 package config
 
 import (
-	"flag"
 	"fmt"
 	"log"
 	"os"
-
-	"github.com/joho/godotenv"
 )
 
 type HTTPServer struct {
@@ -45,23 +42,24 @@ type Config struct {
 	Postgres    Postgres
 	TelegramBot TelegramBot
 	Embedder    Embedder
+	TestWord    string
 }
 
 const logtag = "[config]"
 
 func Load() *Config {
-	configPath := flag.String("config", "", "path env file")
-	flag.Parse()
+	// configPath := flag.String("config", "", "path env file")
+	// flag.Parse()
 
-	if *configPath != "" {
-		if err := godotenv.Load(*configPath); err != nil {
-			log.Fatalf("%s err loading env from file : %v", logtag, err)
-		}
-		log.Printf("%s using env from : %s", logtag, *configPath)
-	} else {
-		log.Printf("%s using env from .env", logtag)
-		_ = godotenv.Load()
-	}
+	// if *configPath != "" {
+	// 	if err := godotenv.Load(*configPath); err != nil {
+	// 		log.Fatalf("%s err loading env from file : %v", logtag, err)
+	// 	}
+	// 	log.Printf("%s using env from : %s", logtag, *configPath)
+	// } else {
+	// 	log.Printf("%s using env from .env", logtag)
+	// 	_ = godotenv.Load()
+	// }
 
 	cfg := &Config{
 		HTTP:        *newHTTP(),
@@ -69,6 +67,7 @@ func Load() *Config {
 		Postgres:    *newPostgres(),
 		TelegramBot: *newTelegramBot(),
 		Embedder:    *newEmbedder(),
+		TestWord:    os.Getenv("TEST_WORD"),
 	}
 
 	log.Printf("%s backend config : %+v\n", logtag, cfg)
@@ -85,21 +84,21 @@ func newHTTP() *HTTPServer {
 func newEmbedder() *Embedder {
 	return &Embedder{
 		Port: getenv("EMBEDDER_PORT", "50051"),
-		Host: getenv("EMBEDDER_HOST", "localhost"),
+		Host: getenv("EMBEDDER_HOST", "embedder-app"),
 	}
 }
 
 func newRedis() *RedisCache {
 	return &RedisCache{
 		Port:     getenv("REDIS_PORT", "6379"),
-		Host:     getenv("REDIS_HOST", "redis"),
+		Host:     getenv("REDIS_HOST", "core-redis"),
 		Password: getenv("REDIS_PASSWORD", "shared"),
 	}
 }
 
 func newPostgres() *Postgres {
 	return &Postgres{
-		Host:     getenv("DB_HOST", "localhost"),
+		Host:     getenv("DB_HOST", "core-postgres"),
 		Port:     getenv("DB_PORT", "5432"),
 		User:     getenv("DB_USER", "admin"),
 		Password: getenv("DB_PASSWORD", "shared"),

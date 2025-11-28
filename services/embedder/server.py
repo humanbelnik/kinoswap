@@ -1,9 +1,11 @@
 import grpc
 from concurrent import futures
 import logging
-import api.proto.embedder_pb2 as  embedding_pb2
-import api.proto.embedder_pb2_grpc as embedding_pb2_grpc 
+import embedder_pb2 as embedding_pb2
+import embedder_pb2_grpc as embedding_pb2_grpc 
 from service import EmbeddingService
+import os
+from flask import Flask, request, jsonify
 
 class EmbeddingServicer(embedding_pb2_grpc.EmbeddingServiceServicer):
     def __init__(self):
@@ -24,13 +26,13 @@ class EmbeddingServicer(embedding_pb2_grpc.EmbeddingServiceServicer):
             
             self.logger.info(f"Successfully created embedding with dimension: {len(embedding_list)}")
             
-            return embedding_pb2.EmbeddingResponse(embedding=embedding_list) # pyright: ignore[reportAttributeAccessIssue]
+            return embedding_pb2.EmbeddingResponse(embedding=embedding_list)
             
         except Exception as e:
             self.logger.error(f"Error in CreateMovieEmbedding: {str(e)}")
             context.set_details(f"Internal server error: {str(e)}")
             context.set_code(grpc.StatusCode.INTERNAL)
-            return embedding_pb2.EmbeddingResponse() # pyright: ignore[reportAttributeAccessIssue]
+            return embedding_pb2.EmbeddingResponse()
 
     def CreatePreferenceEmbedding(self, request, context):
         try:
@@ -41,20 +43,46 @@ class EmbeddingServicer(embedding_pb2_grpc.EmbeddingServiceServicer):
             
             self.logger.info(f"Successfully created embedding with dimension: {len(embedding_list)}")
             
-            return embedding_pb2.EmbeddingResponse(embedding=embedding_list) # pyright: ignore[reportAttributeAccessIssue]
+            return embedding_pb2.EmbeddingResponse(embedding=embedding_list)
             
         except Exception as e:
             self.logger.error(f"Error in CreatePreferenceEmbedding: {str(e)}")
             context.set_details(f"Internal server error: {str(e)}")
             context.set_code(grpc.StatusCode.INTERNAL)
-            return embedding_pb2.EmbeddingResponse() # pyright: ignore[reportAttributeAccessIssue]
+            return embedding_pb2.EmbeddingResponse()
 
-def serve():
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    )
+def create_flask_app():
+    app = Flask(__name__)
+    embedding_service = EmbeddingService()
     
+    @app.route('/health', methods=['GET'])
+    def health_check():
+        return jsonify({"status": "healthy"})
+    
+    @app.route('/preference_embedding', methods=['POST'])
+    def preference_embedding():
+        try:
+            data = request.get_json()
+            if not data or 'text' not in data:
+                return jsonify({"error": "Missing 'text' field in request body"}), 400
+            
+            text = data['text']
+            logging.info(f"Creating preference embedding for text: {text[:100]}...")
+            
+            embedding = embedding_service.build_embedding(text)
+            embedding_list = embedding.tolist()
+            
+            logging.info(f"Successfully created embedding with dimension: {len(embedding_list)}")
+            
+            return jsonify({"embedding": embedding_list})
+            
+        except Exception as e:
+            logging.error(f"Error in preference_embedding: {str(e)}")
+            return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+    
+    return app
+
+def serve_grpc():
     server = grpc.server(
         futures.ThreadPoolExecutor(max_workers=10),
         options=[
@@ -72,13 +100,21 @@ def serve():
     server.start()
     
     logging.info(f"gRPC Server started on port {port}")
-    logging.info("Press Ctrl+C to stop the server")
-    
-    try:
-        server.wait_for_termination()
-    except KeyboardInterrupt:
-        logging.info("Shutting down server...")
-        server.stop(0)
+    server.wait_for_termination()
 
-if __name__ == '__main__':
-    serve()
+def serve_http():
+    app = create_flask_app()
+    port = 5000
+    logging.info(f"HTTP Server started on port {port}")
+    app.run(host='0.0.0.0', port=port)
+
+def serve(delivery_proto='GRPC'):
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    logging.info(f"proto={delivery_proto}")
+    if delivery_proto.upper() == 'HTTP':
+        serve_http()
+    else:
+        serve_grpc()

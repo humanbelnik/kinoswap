@@ -6,12 +6,15 @@ CREATE TABLE IF NOT EXISTS rooms (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     id_admin UUID NOT NULL,
     code TEXT UNIQUE,
-    status TEXT DEFAULT 'LOBBY'
+    ready INT DEFAULT 0,
+    status TEXT DEFAULT 'LOBBY',
+    created_at TIMESTAMP DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS participants (
     id UUID PRIMARY KEY NOT NULL,
     room_id UUID NOT NULL REFERENCES rooms(id) ON DELETE CASCADE, 
+    voted BOOL DEFAULT false,
     preference VECTOR(384)
 );
 
@@ -26,8 +29,10 @@ CREATE TABLE IF NOT EXISTS movies (
     movie_vector VECTOR(384)
 );
 
--- CREATE INDEX IF NOT EXISTS rooms_embedding_idx ON rooms 
--- USING ivfflat (preference_vector vector_cosine_ops) WITH (lists = 100);
-
--- CREATE INDEX IF NOT EXISTS movies_embedding_idx ON movies 
--- USING ivfflat (movie_vector vector_cosine_ops) WITH (lists = 100);
+CREATE TABLE IF NOT EXISTS reactions (
+    id UUID PRIMARY KEY NOT NULL,
+    room_id UUID NOT NULL REFERENCES rooms(id) ON DELETE CASCADE, 
+    movie_id UUID NOT NULL REFERENCES movies(id) ON DELETE CASCADE,
+    likes INT DEFAULT 0,
+    UNIQUE (room_id, movie_id)
+);

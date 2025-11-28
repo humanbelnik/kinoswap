@@ -66,6 +66,7 @@ func (c *Controller) book(ctx *gin.Context) {
 		return
 	}
 
+	c.logger.Info("set", slog.String("X-user-token", ownerToken))
 	ctx.Header("X-user-token", ownerToken)
 	ctx.JSON(http.StatusCreated, BookResponseDTO{
 		RoomCode: roomCode,
@@ -82,8 +83,8 @@ type StatusResponseDTO struct {
 // @Tags Rooms
 // @Param code path string true "Код комнаты"
 // @Success 200 {object} StatusResponseDTO "Статус комнаты"
-// @Failure 404 {object} ErrorResponseDTO "Комната не найдена"
-// @Failure 500 {object} ErrorResponseDTO "Внутренняя ошибка сервера"
+// @Failure 404 {object} http_common.ErrorResponse "Комната не найдена"
+// @Failure 500 {object} http_common.ErrorResponse "Внутренняя ошибка сервера"
 // @Router /rooms/{code}/status [get]
 func (c *Controller) status(ctx *gin.Context) {
 	code := ctx.Param("room_id")
@@ -114,9 +115,9 @@ func (c *Controller) status(ctx *gin.Context) {
 // @Tags Rooms
 // @Param code path string true "Код комнаты"
 // @Success 201 "Комната успешно удалена"
-// @Failure 404 {object} ErrorResponseDTO "Комната не найдена"
+// @Failure 404 {object} http_common.ErrorResponse "Комната не найдена"
 // @Failure 401 {object} http_common.ErrorResponse "Не авторизован"
-// @Failure 500 {object} ErrorResponseDTO "Внутренняя ошибка сервера"
+// @Failure 500 {object} http_common.ErrorResponse "Внутренняя ошибка сервера"
 // @Security UserToken
 // @Router /rooms/{code} [delete]
 func (c *Controller) free(ctx *gin.Context) {
@@ -192,7 +193,8 @@ type ParticipateResponseDTO struct {
 // @Header 201 {string} X-user-token "Токен пользователя"
 // @Failure 404 {object} http_common.ErrorResponse "Комната не найдена"
 // @Failure 500 {object} http_common.ErrorResponse "Внутренняя ошибка сервера"
-// @Router /rooms/{room_id}/participate [post]
+// @Security UserToken
+// @Router /rooms/{room_id}/participations [post]
 func (c *Controller) participate(ctx *gin.Context) {
 	code := ctx.Param("room_id")
 	var req ParticipateRequestDTO
@@ -204,12 +206,14 @@ func (c *Controller) participate(ctx *gin.Context) {
 		return
 	}
 
-	userToken := ctx.GetHeader("X-user-token")
+	token := ctx.GetHeader("X-user-token")
+	c.logger.Info("got header", slog.String("X-user-token", token))
 	var userIDPtr *string
-	if userToken != "" {
-		userIDPtr = &userToken
+	if token != "" {
+		userIDPtr = &token
 	}
 
+	c.logger.Info("got from body", slog.String("participation", req.Preference.Text))
 	returnedUserID, err := c.usecase.Participate(ctx, code, req.Preference, userIDPtr)
 	if err != nil {
 		if errors.Is(err, usecase_room.ErrResourceNotFound) {
@@ -226,9 +230,7 @@ func (c *Controller) participate(ctx *gin.Context) {
 		return
 	}
 
-	if userToken == "" {
-		ctx.Header("X-user-token", returnedUserID)
-	}
-
+	c.logger.Info("set", slog.String("X-user-token", returnedUserID))
+	ctx.Header("X-user-token", returnedUserID)
 	ctx.Status(http.StatusCreated)
 }

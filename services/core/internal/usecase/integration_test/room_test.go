@@ -1,3 +1,6 @@
+//go:build integration
+// +build integration
+
 package integrationtest
 
 import (
@@ -7,7 +10,7 @@ import (
 	infra_pg_init "github.com/humanbelnik/kinoswap/core/internal/infra/postgres/init"
 	infra_postgres_room "github.com/humanbelnik/kinoswap/core/internal/infra/postgres/room"
 	room_usecase "github.com/humanbelnik/kinoswap/core/internal/usecase/room"
-	mocks_embedder "github.com/humanbelnik/kinoswap/core/internal/usecase/room/mocks/room/embedder"
+	mocks_embedder "github.com/humanbelnik/kinoswap/core/internal/usecase/room/mocks/room/Embedder"
 
 	"github.com/ozontech/allure-go/pkg/framework/provider"
 	"github.com/ozontech/allure-go/pkg/framework/suite"
@@ -26,7 +29,7 @@ func initRoomUsecase(t provider.T) *room_usecase.Usecase {
 	roomRepository := infra_postgres_room.New(pgConn)
 	embedder := mocks_embedder.NewEmbedder(t)
 
-	usecase := room_usecase.New(roomRepository, embedder)
+	usecase := room_usecase.New(roomRepository, embedder, 20)
 	return usecase
 }
 

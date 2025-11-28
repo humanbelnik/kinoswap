@@ -2,10 +2,10 @@ package http_init
 
 import (
 	"log"
-	"time"
+	"os"
 
-	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	http_access_middleware "github.com/humanbelnik/kinoswap/core/internal/delivery/http/middleware/access"
 )
 
 const apiPrefix = "/api/v1"
@@ -22,14 +22,17 @@ type ControllerPool struct {
 
 func NewControllerPool() *ControllerPool {
 	engine := gin.Default() // ! Change on NGINX setup
-	engine.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"*"}, // Внимание: не работает с AllowCredentials
-		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowHeaders:     []string{"Origin", "Content-Type", "X-user-token", "Authorization"},
-		ExposeHeaders:    []string{"Content-Length", "X-user-token"},
-		AllowCredentials: false, // Должно быть false при AllowOrigins: ["*"]
-		MaxAge:           12 * time.Hour,
-	}))
+	// engine.Use(cors.New(cors.Config{
+	// 	AllowOrigins:     []string{"*"},
+	// 	AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+	// 	AllowHeaders:     []string{"Origin", "Content-Type", "X-user-token", "Authorization"},
+	// 	ExposeHeaders:    []string{"Content-Length", "X-user-token"},
+	// 	AllowCredentials: false,
+	// 	MaxAge:           12 * time.Hour,
+	// }))
+
+	mode := os.Getenv("MODE")
+	engine.Use(http_access_middleware.ReadOnlyBadGatewayMiddleware(mode))
 	rg := engine.Group(apiPrefix)
 
 	return &ControllerPool{

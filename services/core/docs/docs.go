@@ -92,6 +92,12 @@ const docTemplate = `{
                             "$ref": "#/definitions/http_movie.MoviesListResponseDTO"
                         }
                     },
+                    "401": {
+                        "description": "Пользователь не авторизован",
+                        "schema": {
+                            "$ref": "#/definitions/http_common.ErrorResponse"
+                        }
+                    },
                     "500": {
                         "description": "Внутренняя ошибка сервера",
                         "schema": {
@@ -143,6 +149,12 @@ const docTemplate = `{
                             "$ref": "#/definitions/http_common.ErrorResponse"
                         }
                     },
+                    "401": {
+                        "description": "Пользователь не авторизован",
+                        "schema": {
+                            "$ref": "#/definitions/http_common.ErrorResponse"
+                        }
+                    },
                     "500": {
                         "description": "Внутренняя ошибка сервера",
                         "schema": {
@@ -187,6 +199,12 @@ const docTemplate = `{
                             "$ref": "#/definitions/http_common.ErrorResponse"
                         }
                     },
+                    "401": {
+                        "description": "Пользователь не авторизован",
+                        "schema": {
+                            "$ref": "#/definitions/http_common.ErrorResponse"
+                        }
+                    },
                     "404": {
                         "description": "Фильм не найден",
                         "schema": {
@@ -203,8 +221,8 @@ const docTemplate = `{
             }
         },
         "/rooms": {
-            "get": {
-                "description": "Выделяет команату для голосования и возвращет ее идентификатор",
+            "post": {
+                "description": "Создает новую комнату для выбора фильмов",
                 "consumes": [
                     "application/json"
                 ],
@@ -212,14 +230,69 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "Rooms opertaions"
+                    "Rooms"
                 ],
-                "summary": "Выделить комнату для голосования",
+                "summary": "Создание комнаты",
                 "responses": {
-                    "200": {
+                    "201": {
                         "description": "Комната успешно создана",
+                        "headers": {
+                            "X-user-token": {
+                                "type": "string",
+                                "description": "Токен владельца комнаты"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Внутренняя ошибка сервера",
                         "schema": {
-                            "$ref": "#/definitions/http_room.AcquireRoomResponseDTO"
+                            "$ref": "#/definitions/http_common.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Ресур недоступен",
+                        "schema": {
+                            "$ref": "#/definitions/http_common.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/rooms/{code}": {
+            "delete": {
+                "security": [
+                    {
+                        "UserToken": []
+                    }
+                ],
+                "description": "Удаляет комнату по коду",
+                "tags": [
+                    "Rooms"
+                ],
+                "summary": "Удаление комнаты",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Код комнаты",
+                        "name": "code",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Комната успешно удалена"
+                    },
+                    "401": {
+                        "description": "Не авторизован",
+                        "schema": {
+                            "$ref": "#/definitions/http_common.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Комната не найдена",
+                        "schema": {
+                            "$ref": "#/definitions/http_common.ErrorResponse"
                         }
                     },
                     "500": {
@@ -231,21 +304,183 @@ const docTemplate = `{
                 }
             }
         },
-        "/rooms/{room_id}": {
+        "/rooms/{code}/status": {
             "get": {
-                "description": "Проверяет доступ к комнате",
-                "produces": [
-                    "application/json"
-                ],
+                "description": "Возвращает текущий статус комнаты",
                 "tags": [
-                    "Rooms opertaions"
+                    "Rooms"
                 ],
-                "summary": "Проверяет доступ к комнате",
+                "summary": "Получение статуса комнаты",
                 "parameters": [
                     {
                         "type": "string",
-                        "example": "\"123456\"",
-                        "description": "Идентификатор комнаты",
+                        "description": "Код комнаты",
+                        "name": "code",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Статус комнаты",
+                        "schema": {
+                            "$ref": "#/definitions/http_room.StatusResponseDTO"
+                        }
+                    },
+                    "404": {
+                        "description": "Комната не найдена",
+                        "schema": {
+                            "$ref": "#/definitions/http_common.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Внутренняя ошибка сервера",
+                        "schema": {
+                            "$ref": "#/definitions/http_common.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/rooms/{room_id}/movies": {
+            "get": {
+                "security": [
+                    {
+                        "UserToken": []
+                    }
+                ],
+                "description": "Возвращает N фильмов, наиболее подходящих под предпочтения участников комнаты",
+                "tags": [
+                    "Voting"
+                ],
+                "summary": "Получение батча фильмов для голосования",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Код комнаты",
+                        "name": "room_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Количество фильмов",
+                        "name": "count",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Батч фильмов успешно получен",
+                        "schema": {
+                            "$ref": "#/definitions/http_vote.GetMoviesResponseDTO"
+                        }
+                    },
+                    "400": {
+                        "description": "Неверный формат запроса",
+                        "schema": {
+                            "$ref": "#/definitions/http_common.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Пользователь не является участником комнаты",
+                        "schema": {
+                            "$ref": "#/definitions/http_common.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Комната не найдена",
+                        "schema": {
+                            "$ref": "#/definitions/http_common.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Внутренняя ошибка сервера",
+                        "schema": {
+                            "$ref": "#/definitions/http_common.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/rooms/{room_id}/participations": {
+            "post": {
+                "security": [
+                    {
+                        "UserToken": []
+                    }
+                ],
+                "description": "Добавляет участника с предпочтениями в комнату",
+                "consumes": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Rooms"
+                ],
+                "summary": "Участие в комнате",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Код комнаты",
+                        "name": "room_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Данные участника",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/http_room.ParticipateRequestDTO"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Участник успешно добавлен",
+                        "schema": {
+                            "$ref": "#/definitions/http_room.ParticipateResponseDTO"
+                        },
+                        "headers": {
+                            "X-user-token": {
+                                "type": "string",
+                                "description": "Токен пользователя"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Комната не найдена",
+                        "schema": {
+                            "$ref": "#/definitions/http_common.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Внутренняя ошибка сервера",
+                        "schema": {
+                            "$ref": "#/definitions/http_common.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/rooms/{room_id}/results": {
+            "get": {
+                "security": [
+                    {
+                        "UserToken": []
+                    }
+                ],
+                "description": "Возвращает результаты голосования в комнате, отсортированные по количеству лайков",
+                "tags": [
+                    "Voting"
+                ],
+                "summary": "Получение результатов голосования",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Код комнаты",
                         "name": "room_id",
                         "in": "path",
                         "required": true
@@ -253,12 +488,21 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "Комната существует"
+                        "description": "Результаты успешно получены",
+                        "schema": {
+                            "$ref": "#/definitions/http_vote.GetResultsResponseDTO"
+                        }
                     },
                     "403": {
-                        "description": "Комната закрыта",
+                        "description": "Пользователь не является участником комнаты",
                         "schema": {
-                            "type": "objet"
+                            "$ref": "#/definitions/http_common.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Комната не найдена",
+                        "schema": {
+                            "$ref": "#/definitions/http_common.ErrorResponse"
                         }
                     },
                     "500": {
@@ -269,211 +513,77 @@ const docTemplate = `{
                     }
                 }
             },
-            "delete": {
-                "description": "Освобождает ресурсы комнаты и делает её готовй для последующей резервации",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Rooms opertaions"
-                ],
-                "summary": "Освобождение комнаты",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "example": "\"123456\"",
-                        "description": "Идентификатор комнаты",
-                        "name": "room_id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Комната успешно освобождена"
-                    },
-                    "500": {
-                        "description": "Внутренняя ошибка сервера",
-                        "schema": {
-                            "$ref": "#/definitions/http_common.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/rooms/{room_id}/participation": {
-            "post": {
-                "description": "Позволяет пользователю присоединиться к голосованию с указнием пожеланий",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Rooms opertaions"
-                ],
-                "summary": "Участие в комнате",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "example": "\"123456\"",
-                        "description": "Идентификатор комнаты",
-                        "name": "room_id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Предпочтения пользователя",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/http_room.ParticipateRequestDTO"
-                        }
-                    }
-                ],
-                "responses": {
-                    "202": {
-                        "description": "Участник добавлен в пул голосующих"
-                    },
-                    "400": {
-                        "description": "Некорректный формат тела запроса",
-                        "schema": {
-                            "$ref": "#/definitions/http_common.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Внутренняя ошибка сервера",
-                        "schema": {
-                            "$ref": "#/definitions/http_common.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/rooms/{room_id}/voting/results": {
-            "get": {
-                "description": "Возвращает массив фильмов с количеством лайков для текущей или завершенной сессии голосования",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Voting operations"
-                ],
-                "summary": "Получить результаты голосования",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "example": "\"123456\"",
-                        "description": "Идентификатор комнаты",
-                        "name": "room_id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Результаты голосования",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/http_voting.MovieResultDTO"
-                            }
-                        }
-                    },
-                    "500": {
-                        "description": "Внутренняя ошибка сервера",
-                        "schema": {
-                            "$ref": "#/definitions/http_common.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/rooms/{room_id}/voting/status": {
             "patch": {
-                "description": "Изменяет статус сессии голосования",
-                "consumes": [
-                    "application/json"
+                "security": [
+                    {
+                        "UserToken": []
+                    },
+                    {
+                        "UserToken": []
+                    }
                 ],
-                "produces": [
+                "description": "Добавляет реакции пользователя (лайки) к фильмам в рамках комнаты\nДобавляет реакции пользователя (лайки) к фильмам в рамках комнаты",
+                "consumes": [
+                    "application/json",
                     "application/json"
                 ],
                 "tags": [
-                    "Voting operations"
+                    "Voting",
+                    "Voting"
                 ],
-                "summary": "Изменить статус голосования",
+                "summary": "Добавление реакций к фильмам",
                 "parameters": [
                     {
                         "type": "string",
-                        "example": "\"123456\"",
-                        "description": "Идентификатор комнаты",
+                        "description": "Код комнаты",
                         "name": "room_id",
                         "in": "path",
                         "required": true
                     },
                     {
-                        "description": "Новый статус голосования",
+                        "description": "Реакции пользователя",
                         "name": "request",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/http_voting.VotingStatusRequestDTO"
+                            "$ref": "#/definitions/http_vote.VoteRequestDTO"
+                        }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Код комнаты",
+                        "name": "room_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Реакции пользователя",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/http_vote.VoteRequestDTO"
                         }
                     }
                 ],
                 "responses": {
-                    "200": {
-                        "description": "Статус успешно обновлен"
+                    "302": {
+                        "description": "Редирект на страницу резульататов"
                     },
-                    "500": {
-                        "description": "Внутренняя ошибка сервера",
+                    "400": {
+                        "description": "Неверный формат запроса",
                         "schema": {
                             "$ref": "#/definitions/http_common.ErrorResponse"
                         }
-                    }
-                }
-            }
-        },
-        "/rooms/{room_id}/voting/votes": {
-            "post": {
-                "description": "Принимает массив голосов (movie_id, liked) и регистрирует их для текущей сессии голосования",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Voting operations"
-                ],
-                "summary": "Отправить результаты голосования",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "example": "\"123456\"",
-                        "description": "Идентификатор комнаты",
-                        "name": "room_id",
-                        "in": "path",
-                        "required": true
                     },
-                    {
-                        "description": "Массив голосов за фильмы",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
+                    "403": {
+                        "description": "Пользователь не является участником комнаты",
                         "schema": {
-                            "$ref": "#/definitions/http_voting.VoteRequestDTO"
+                            "$ref": "#/definitions/http_common.ErrorResponse"
                         }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Голоса успешно приняты"
                     },
-                    "400": {
-                        "description": "Некорректный запрос",
+                    "404": {
+                        "description": "Комната не найдена",
                         "schema": {
                             "$ref": "#/definitions/http_common.ErrorResponse"
                         }
@@ -564,16 +674,103 @@ const docTemplate = `{
                 }
             }
         },
-        "http_room.AcquireRoomResponseDTO": {
+        "http_room.ParticipateRequestDTO": {
             "type": "object",
+            "required": [
+                "preference"
+            ],
             "properties": {
-                "room_id": {
-                    "type": "string",
-                    "example": "123456"
+                "preference": {
+                    "$ref": "#/definitions/model.Preference"
                 }
             }
         },
-        "http_room.ParticipateRequestDTO": {
+        "http_room.ParticipateResponseDTO": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "http_room.StatusResponseDTO": {
+            "type": "object",
+            "properties": {
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "http_vote.GetMoviesResponseDTO": {
+            "type": "object",
+            "properties": {
+                "movies": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/model.MovieMeta"
+                    }
+                }
+            }
+        },
+        "http_vote.GetResultsResponseDTO": {
+            "type": "object",
+            "properties": {
+                "results": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/model.Result"
+                    }
+                }
+            }
+        },
+        "http_vote.VoteRequestDTO": {
+            "type": "object",
+            "required": [
+                "reactions"
+            ],
+            "properties": {
+                "reactions": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "integer"
+                    }
+                }
+            }
+        },
+        "model.MovieMeta": {
+            "type": "object",
+            "properties": {
+                "genres": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "id": {
+                    "type": "string"
+                },
+                "overview": {
+                    "type": "string"
+                },
+                "posterLink": {
+                    "type": "string"
+                },
+                "rating": {
+                    "type": "number",
+                    "format": "float64"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "year": {
+                    "type": "integer"
+                }
+            }
+        },
+        "model.Preference": {
             "type": "object",
             "properties": {
                 "text": {
@@ -581,85 +778,14 @@ const docTemplate = `{
                 }
             }
         },
-        "http_voting.MovieResultDTO": {
+        "model.Result": {
             "type": "object",
             "properties": {
-                "genres": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    },
-                    "example": [
-                        "фантастика",
-                        "драма",
-                        "приключения"
-                    ]
+                "likes": {
+                    "type": "integer"
                 },
-                "id": {
-                    "type": "string",
-                    "example": "550e8400-e29b-41d4-a716-446655440000"
-                },
-                "likes_count": {
-                    "type": "integer",
-                    "example": 5
-                },
-                "overview": {
-                    "type": "string",
-                    "example": "Захватывающая история..."
-                },
-                "poster_link": {
-                    "type": "string",
-                    "example": "https://example.com/poster.jpg"
-                },
-                "rating": {
-                    "type": "number",
-                    "example": 8.6
-                },
-                "title": {
-                    "type": "string",
-                    "example": "Интерстеллар"
-                },
-                "year": {
-                    "type": "integer",
-                    "example": 2014
-                }
-            }
-        },
-        "http_voting.MovieVoteDTO": {
-            "type": "object",
-            "properties": {
-                "liked": {
-                    "type": "boolean",
-                    "example": true
-                },
-                "movie_id": {
-                    "type": "string",
-                    "example": "550e8400-e29b-41d4-a716-446655440000"
-                }
-            }
-        },
-        "http_voting.VoteRequestDTO": {
-            "type": "object",
-            "properties": {
-                "votes": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/http_voting.MovieVoteDTO"
-                    }
-                }
-            }
-        },
-        "http_voting.VotingStatusRequestDTO": {
-            "type": "object",
-            "properties": {
-                "status": {
-                    "type": "string",
-                    "enum": [
-                        "start",
-                        "restart",
-                        "finish"
-                    ],
-                    "example": "active"
+                "mm": {
+                    "$ref": "#/definitions/model.MovieMeta"
                 }
             }
         }
@@ -669,6 +795,11 @@ const docTemplate = `{
             "type": "apiKey",
             "name": "X-admin-token",
             "in": "header"
+        },
+        "UserToken": {
+            "type": "apiKey",
+            "name": "X-user-token",
+            "in": "header"
         }
     }
 }`
@@ -676,7 +807,7 @@ const docTemplate = `{
 // SwaggerInfo holds exported Swagger Info so clients can modify it
 var SwaggerInfo = &swag.Spec{
 	Version:          "1.0",
-	Host:             "localhost:8080",
+	Host:             "localhost:80",
 	BasePath:         "/api/v1/",
 	Schemes:          []string{},
 	Title:            "Kinoswap API",

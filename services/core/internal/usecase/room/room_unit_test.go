@@ -1,4 +1,5 @@
-//go:build unit
+//go:build !integration
+// +build !integration
 
 package usecase_room
 
@@ -8,7 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/humanbelnik/kinoswap/core/internal/model"
-	embedder_mocks "github.com/humanbelnik/kinoswap/core/internal/usecase/room/mocks/room/embedder"
+	embedder_mocks "github.com/humanbelnik/kinoswap/core/internal/usecase/room/mocks/room/Embedder"
 	repo_mocks "github.com/humanbelnik/kinoswap/core/internal/usecase/room/mocks/room/repository"
 	"github.com/ozontech/allure-go/pkg/framework/provider"
 	"github.com/ozontech/allure-go/pkg/framework/suite"
@@ -30,7 +31,7 @@ type resources struct {
 func initResources(t provider.T) *resources {
 	roomRepo := repo_mocks.NewRoomRepository(t)
 	embedder := embedder_mocks.NewEmbedder(t)
-	usecase := New(roomRepo, embedder)
+	usecase := New(roomRepo, embedder, 20)
 
 	return &resources{
 		roomRepo: roomRepo,

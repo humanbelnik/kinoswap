@@ -1,7 +1,6 @@
 package ws_room
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -72,7 +71,6 @@ func (c *Controller) connect(ctx *gin.Context) {
 	}
 
 	c.hub.register <- client
-	fmt.Println("6")
 
 	go client.writePump()
 	go client.readPump()
@@ -114,13 +112,12 @@ func (c *Client) writePump() {
 		}
 	}
 
-	c.conn.WriteMessage(websocket.CloseMessage, []byte{})
+	_ = c.conn.WriteMessage(websocket.CloseMessage, []byte{})
 }
 
 func (c *Client) handleEvent(event Event) {
 	switch event.Type {
 	case "START_VOTING":
-
 		if c.role != "owner" {
 			c.send <- Event{
 				Type: EventError,

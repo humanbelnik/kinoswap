@@ -1,0 +1,352 @@
+services:
+  core-app:
+    build:
+      context: ./services/core
+      dockerfile: Dockerfile.app
+    container_name: app-core-service
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env  
+    depends_on:
+      core-migrate:
+        condition: service_completed_successfully
+      core-redis:
+        condition: service_healthy
+      core-postgres:
+        condition: service_healthy
+      embedder-app:
+        condition: service_started
+    volumes:
+      - ~/.aws:/root/.aws
+    networks:
+      - core-network
+    restart: unless-stopped
+
+  mock-s3-server:
+    build:
+      context: ./services/mocks3
+      dockerfile: Dockerfile
+    ports:
+      - "9090:9090"
+    environment:
+      - MOCK_S3_ADDR=:9090
+    networks:
+      - core-network
+
+
+  core-app-ro1:
+    build:
+      context: ./services/core
+      dockerfile: Dockerfile.app
+    container_name: app-core-service-ro1
+    ports:
+      - "8888:8080"
+    env_file:
+      - .env  
+    environment:
+      MODE: RO
+    depends_on:
+      core-migrate:
+        condition: service_completed_successfully
+      core-redis:
+        condition: service_healthy
+      core-postgres:
+        condition: service_healthy
+      embedder-app:
+        condition: service_started
+    volumes:
+      - ~/.aws:/root/.aws
+    networks:
+      - core-network
+    restart: unless-stopped
+
+  core-app-ro2:
+    build:
+      context: ./services/core
+      dockerfile: Dockerfile.app
+    container_name: app-core-service-ro2
+    ports:
+      - "8887:8080"
+    env_file:
+      - .env 
+    environment:
+      MODE: RO 
+    depends_on:
+      core-migrate:
+        condition: service_completed_successfully
+      core-redis:
+        condition: service_healthy
+      core-postgres:
+        condition: service_healthy
+      embedder-app:
+        condition: service_started
+    volumes:
+      - ~/.aws:/root/.aws
+    networks:
+      - core-network
+    restart: unless-stopped
+
+  core-postgres:
+    image: pgvector/pgvector:pg16
+    container_name: postgres-core-service
+    env_file:
+      - .env
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: shared
+      POSTGRES_DB: test
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./services/core/migration:/migration
+      - postgres_primary_data:/var/lib/postgresql/data
+      - ./services/core/init-scripts:/docker-entrypoint-initdb.d  # Добавьте эту строку
+      - ./services/core/postgresql/pg_hba.conf:/tmp/pg_hba.conf  # Добавьте эту строку
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d test"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+    networks:
+      - core-network
+    command: >
+      postgres
+      -c listen_addresses='*'
+      -c wal_level=replica
+      -c max_wal_senders=10
+      -c max_replication_slots=10
+      -c hot_standby=on
+
+  core-postgres-replica:
+    image: pgvector/pgvector:pg16
+    container_name: core-postgres-replica
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: shared
+      POSTGRES_DB: test
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_replica_data:/var/lib/postgresql/data
+    networks:
+      - core-network
+    depends_on:
+      core-postgres:
+        condition: service_healthy
+    command: >
+      bash -c "
+        until pg_isready -h core-postgres -U admin; do
+          echo 'Waiting for primary database...'
+          sleep 2
+        done
+        
+        if [ ! -f /var/lib/postgresql/data/postgresql.conf ]; then
+          echo 'Configuring physical replication...'
+          
+          rm -rf /var/lib/postgresql/data/*
+          PGPASSWORD=repl_password gosu postgres pg_basebackup -h core-postgres -U repl_user -D /var/lib/postgresql/data -P -R -S replication_slot --wal-method=stream -X stream
+          
+          echo 'Physical replication configured successfully'
+        fi
+        
+        echo 'Starting PostgreSQL replica...'
+          exec docker-entrypoint.sh postgres -c hot_standby=on
+      "
+
+  core-migrate:
+    image: migrate/migrate
+    depends_on:
+      core-postgres:
+        condition: service_healthy
+    env_file:
+      - .env
+    volumes:
+      - ./services/core/migration:/migration
+    command:
+      - "-path=/migration"
+      - "-database=postgres://admin:shared@core-postgres:5432/test?sslmode=disable"
+      - "up"
+    networks:
+      - core-network
+
+  core-redis:
+    image: redis:7.2-alpine
+    container_name: redis-core-service
+    env_file:
+      - .env
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--requirepass", "shared"]
+    volumes:
+      - ./services/core/redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "--pass", "shared", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    networks:
+      - core-network
+
+  embedder-app:
+    image: humanbelnik/kinoswap-embedder:latest    # build:
+    #   context: ./services/embedder
+    #   dockerfile: Dockerfile.app
+    container_name: embedder-app
+
+    ports:
+      - "50051:50051"
+      - "5000:5000"
+    environment:
+      - DELIVERY_PROTO=grpc
+    volumes:
+      - ./services/embedder/model:/app/model:ro
+    networks:
+      - core-network
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:1.24-alpine
+    container_name: kinoswap-nginx-service
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./static:/usr/share/nginx/static:ro
+    depends_on:
+      - core-app
+    networks:
+      - core-network
+    restart: unless-stopped
+
+  pgadmin:
+    image: dpage/pgadmin4:8
+    container_name: pgadmin-core-service
+    env_file:
+      - .env
+    ports:
+      - "8181:80"
+    networks:
+      - core-network
+    restart: unless-stopped
+    depends_on:
+      - core-postgres
+
+  core-integration-tests:
+    build:
+      context: ./services/core 
+      dockerfile: Dockerfile.test
+      target: test-runner
+    env_file:
+      - .env
+    networks:
+      - core-network
+    depends_on:
+      core-migrate:
+        condition: service_completed_successfully
+    environment:
+      - ALLURE_OUTPUT_PATH=/app
+    volumes:
+      - ./allure-results:/app/allure-results
+    command: ["sh", "-c", "go test ./internal/usecase/... -tags='integration' ./internal/usecase/integration_test/... -test.v"]
+
+  core-unit-tests:
+    build:
+      context: ./services/core
+      dockerfile: Dockerfile.test
+      target: test-runner
+    networks:
+      - core-network
+    environment:
+      - ALLURE_OUTPUT_PATH=/app
+    volumes:
+      - ./allure-results:/app/allure-results
+    command: ["sh", "-c", "go test ./internal/usecase/... -tags='!integration' . -test.v"]
+
+  e2e-tests:
+    build:
+      context: ./services/e2e
+      dockerfile: Dockerfile
+      target: test-runner
+    networks:
+      - core-network
+    environment:
+      - ALLURE_OUTPUT_PATH=/app
+      - ENV=CI
+    depends_on:
+      core-app:
+        condition: service_started
+    volumes:
+      - ./allure-results:/app/allure-results
+    command: >
+      sh -c "echo > /app/temp.txt &&
+            go test ./... -test.v"
+    
+
+  loki:
+    image: grafana/loki:2.9.0
+    container_name: loki
+    user: "0"
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - loki_data:/loki
+    networks:
+      - core-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3100/ready"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  promtail:
+    image: grafana/promtail:2.9.0
+    volumes:
+      - ./logs:/var/log:ro
+      - ./monitoring/promtail-config.yaml:/etc/promtail/config.yaml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    command: -config.file=/etc/promtail/config.yaml
+    depends_on:
+      - loki
+    networks:
+      - core-network
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:10.0.0
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SERVER_DOMAIN=localhost
+      - GF_SERVER_ROOT_URL=http://localhost/monitoring/
+      - GF_SERVER_SERVE_FROM_SUB_PATH=true
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./monitoring/dashboards:/etc/grafana/provisioning/dashboards:ro
+    depends_on:
+      - loki
+      - promtail
+    networks:
+      - core-network
+    restart: unless-stopped
+
+
+networks:
+  core-network:
+    driver: bridge
+  
+volumes:
+  postgres_primary_data:
+  postgres_replica_data:
+  nginx_cache:
+  loki_data:
+  grafana_data:

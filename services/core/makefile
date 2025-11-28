@@ -4,6 +4,9 @@ mock-usecase-deps: mock-vote-usecase-deps mock-room-usecase-deps mock-movie-usec
 usecase-mocks:
 	go generate ./...
 
+build-run:
+	docker-compose -f docker-compose.prod.yml up --build
+
 run-storages:
 	docker-compose up --build migrate redis
 
@@ -42,3 +45,8 @@ test-allure:
 	done
 	
 	allure generate $(ALLURE_RESULTS_DIR) -o $(ALLURE_REPORT_DIR) --clean
+
+pre-commit:
+	gocyclo -over 10 .
+	golangci-lint run ./...
+	

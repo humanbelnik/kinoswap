@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/humanbelnik/kinoswap/core/internal/model"
@@ -15,6 +16,7 @@ const (
 	EventLobbyUpdate      = "LOBBY_UPDATE"
 	EventStartVoting      = "START_VOTING"
 	EventRedirectToVoting = "REDIRECT_TO_VOTING"
+	EventVotingFinished   = "VOTING_FINISHED"
 	EventError            = "ERROR"
 )
 
@@ -167,10 +169,31 @@ func (h *Hub) StartVoting(roomCode string, userID string) error {
 			Payload: map[string]interface{}{
 				"initiated_by": userID,
 				"room_code":    roomCode,
-				"redirect_url": "/voting.html?room=" + roomCode,
+				"redirect_url": "/rooms/" + roomCode + "/voting/",
 			},
 		},
 	}
+
+	return nil
+}
+
+func (h *Hub) NotifyVotingComplete(roomCode string) error {
+	h.broadcast <- roomEvent{
+		roomCode: roomCode,
+		event: Event{
+			Type: EventVotingFinished,
+			Payload: map[string]interface{}{
+				"room_code":    roomCode,
+				"message":      "All participants have voted",
+				"code":         roomCode,
+				"redirect_url": "/rooms/" + roomCode + "/results/",
+				"timestamp":    time.Now().Unix(),
+			},
+		},
+	}
+
+	h.logger.Info("voting complete notification sent",
+		"room", roomCode)
 
 	return nil
 }

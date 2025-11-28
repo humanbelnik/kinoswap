@@ -1,15 +1,22 @@
 package model
 
+import "github.com/google/uuid"
+
 type Preference struct {
 	Text string
 }
-type Reaction = bool
+type Reaction = int
 
 const (
-	PassReaction  Reaction = true
-	SmashReaction Reaction = false
+	PassReaction  Reaction = 1
+	SmashReaction Reaction = 0
 )
 
-type VoteResult struct {
-	Results map[*MovieMeta]Reaction
+type Reactions struct {
+	Reactions map[uuid.UUID]Reaction
+}
+
+type Result struct {
+	MM    MovieMeta
+	Likes int
 }

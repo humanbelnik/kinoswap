@@ -7,8 +7,7 @@
 *.dll
 *.so
 *.dylib
-*mocks/
-# Test binary, built with `go test -c`
+git rm -rf .# Test binary, built with `go test -c`
 .env.test
 
 *allure*
@@ -17,6 +16,8 @@
 coverage.*
 *.coverprofile
 profile.cov
+
+*venv*
 
 .aws/
 # Dependency directories (remove the comment below to include it)

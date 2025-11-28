@@ -5,6 +5,7 @@ import (
 	"errors"
 	"math/rand"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/humanbelnik/kinoswap/core/internal/model"
@@ -26,6 +27,10 @@ type RoomRepository interface {
 	SetStatusByCode(ctx context.Context, code string, status string) error
 	AddPreferenceEmbedding(ctx context.Context, code string, userID uuid.UUID, prefEmbedding model.Embedding) error
 	ParticipantsCount(ctx context.Context, code string) (int, error)
+	IsParticipant(ctx context.Context, code string, userID uuid.UUID) (bool, error)
+	UUIDByCode(ctx context.Context, code string) (uuid.UUID, error)
+
+	CleanupOrphantRooms(ctx context.Context, lobbiesDeadline, votingDeadline time.Duration) error
 }
 
 //go:generate mockery --name=Embedder --output=./mocks/room/Embedder --filename=Embedder.go
@@ -36,21 +41,40 @@ type Embedder interface {
 type Usecase struct {
 	RoomRepository RoomRepository
 	Embedder       Embedder
+
+	// Used to make periodic stuff on every Nth cleanup
+	cleanupPeriod int
+	booksCount    int
 }
 
 func New(
 	RoomRepository RoomRepository,
 	Embedder Embedder,
+	cleanup int,
 ) *Usecase {
+	if cleanup <= 0 {
+		cleanup = 20 /* default */
+	}
+
 	return &Usecase{
 		RoomRepository: RoomRepository,
 		Embedder:       Embedder,
+		cleanupPeriod:  cleanup,
 	}
 }
 
 // Owner token must be set on a client in order to be able to do 'owner ops'
 func (u *Usecase) Book(ctx context.Context) (roomCode string, ownerToken string, err error) {
 	ownerID := u.resolveOwnerToken()
+
+	// Cleanup orphant rooms
+	u.booksCount++
+	if u.booksCount%u.cleanupPeriod == 0 {
+		if err := u.RoomRepository.CleanupOrphantRooms(ctx, time.Minute*5 /* Lobbies */, time.Minute*10 /* Votings */); err != nil {
+			return "", "", errors.Join(ErrInternal, err)
+		}
+	}
+
 	roomCode, err = u.createRoomLobby(ctx, ownerID)
 	if err != nil {
 		return "", "", err
@@ -112,6 +136,23 @@ func (u *Usecase) IsOwner(ctx context.Context, code string, ownerID string) (boo
 	}
 
 	return isOwner, nil
+}
+
+func (u *Usecase) IsParticipant(ctx context.Context, code string, userID string) (bool, error) {
+	userUUID, err := uuid.Parse(userID)
+	if err != nil {
+		return false, errors.Join(ErrInternal, err)
+	}
+
+	isParticipant, err := u.RoomRepository.IsParticipant(ctx, code, userUUID)
+	if err != nil {
+		if errors.Is(err, ErrResourceNotFound) {
+			return false, ErrResourceNotFound
+		}
+		return false, errors.Join(ErrInternal, err)
+	}
+
+	return isParticipant, nil
 }
 
 func (u *Usecase) Free(ctx context.Context, code string) error {
@@ -183,4 +224,16 @@ func (u *Usecase) ParticipantsCount(ctx context.Context, code string) (int, erro
 		return 0, errors.Join(ErrInternal, err)
 	}
 	return count, nil
+}
+
+func (u *Usecase) UUIDByCode(ctx context.Context, code string) (uuid.UUID, error) {
+	_uuid, err := u.RoomRepository.UUIDByCode(ctx, code)
+	if err != nil {
+		if errors.Is(err, ErrResourceNotFound) {
+			return uuid.Nil, ErrResourceNotFound
+		}
+		return uuid.Nil, errors.Join(err, ErrInternal)
+	}
+
+	return _uuid, err
 }
