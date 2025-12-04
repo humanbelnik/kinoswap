@@ -7,20 +7,20 @@ import (
 
 	"github.com/gin-gonic/gin"
 	http_common "github.com/humanbelnik/kinoswap/core/internal/delivery/http/common"
-	servie_simple_auth "github.com/humanbelnik/kinoswap/core/internal/service/auth/simple"
+	auth_client "github.com/humanbelnik/kinoswap/core/internal/infra/auth"
 )
 
 type Middleware struct {
-	service *servie_simple_auth.Service
-	logger  *slog.Logger
+	client auth_client.AuthClient
+	logger *slog.Logger
 }
 
 func New(
-	service *servie_simple_auth.Service,
+	client auth_client.AuthClient,
 ) *Middleware {
 	return &Middleware{
-		service: service,
-		logger:  slog.Default(),
+		client: client,
+		logger: slog.Default(),
 	}
 }
 
@@ -38,7 +38,7 @@ func (m *Middleware) AuthRequired() gin.HandlerFunc {
 			return
 		}
 
-		valid, err := m.service.IsValid(t)
+		valid, err := m.client.ValidateToken(t)
 		if err != nil {
 			m.logger.Error("interna; error", slog.String("error", err.Error()))
 			ctx.JSON(http.StatusInternalServerError, http_common.ErrorResponse{

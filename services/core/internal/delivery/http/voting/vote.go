@@ -218,15 +218,62 @@ type VoteRequestDTO struct {
 // @Security UserToken
 // @Failure 500 {object} http_common.ErrorResponse "Внутренняя ошибка сервера"
 // @Router /rooms/{room_id}/results [patch]
+// Vote добавляет реакции пользователя к фильмам
+// @Summary Добавление реакций к фильмам
+// @Description Добавляет реакции пользователя (лайки) к фильмам в рамках комнаты
+// @Tags Voting
+// @Accept json
+// @Param room_id path string true "Код комнаты"
+// @Param request body VoteRequestDTO true "Реакции пользователя"
+// @Success 302 "Редирект на страницу резульататов"
+// @Failure 400 {object} http_common.ErrorResponse "Неверный формат запроса"
+// @Failure 403 {object} http_common.ErrorResponse "Пользователь не является участником комнаты"
+// @Failure 404 {object} http_common.ErrorResponse "Комната не найдена"
+// @Security UserToken
+// @Failure 500 {object} http_common.ErrorResponse "Внутренняя ошибка сервера"
+// @Router /rooms/{room_id}/results [patch]
 func (c *Controller) vote(ctx *gin.Context) {
 	roomID, userToken, ok := c.validateParticipant(ctx)
 	if !ok {
 		return
 	}
 
+	req, ok := c.bindVoteRequest(ctx, roomID, userToken)
+	if !ok {
+		return
+	}
+
+	userUUID, ok := c.parseUserToken(ctx, roomID, userToken)
+	if !ok {
+		return
+	}
+
+	reactions, ok := c.validateAndConvertReactions(ctx, roomID, req.Reactions)
+	if !ok {
+		return
+	}
+
+	c.logger.Info("processing vote request",
+		slog.String("room_id", roomID),
+		slog.String("user_id", userUUID.String()),
+		slog.Int("reactions_count", len(reactions)),
+		slog.Any("reactions", reactions))
+
+	if !c.processVote(ctx, roomID, userUUID, reactions) {
+		return
+	}
+
+	c.checkReady(ctx, roomID)
+	ctx.Status(http.StatusAccepted)
+}
+
+func (c *Controller) bindVoteRequest(ctx *gin.Context, roomID, userToken string) (struct {
+	Reactions map[string]int `json:"reactions" binding:"required"`
+}, bool) {
 	var req struct {
 		Reactions map[string]int `json:"reactions" binding:"required"`
 	}
+
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		c.logger.Error("invalid request format",
 			slog.String("room_id", roomID),
@@ -235,9 +282,13 @@ func (c *Controller) vote(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, http_common.ErrorResponse{
 			Message: "invalid request format",
 		})
-		return
+		return req, false
 	}
 
+	return req, true
+}
+
+func (c *Controller) parseUserToken(ctx *gin.Context, roomID, userToken string) (uuid.UUID, bool) {
 	userUUID, err := uuid.Parse(userToken)
 	if err != nil {
 		c.logger.Error("invalid user token format",
@@ -247,59 +298,79 @@ func (c *Controller) vote(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, http_common.ErrorResponse{
 			Message: "invalid user token format",
 		})
-		return
+		return uuid.Nil, false
 	}
 
-	reactions := make(map[uuid.UUID]int, len(req.Reactions))
+	return userUUID, true
+}
 
-	for movieIDStr, reaction := range req.Reactions {
-		if reaction != 0 && reaction != 1 {
-			c.logger.Error("invalid reaction value",
-				slog.String("room_id", roomID),
-				slog.String("movie_id", movieIDStr),
-				slog.Int("reaction", reaction))
-			ctx.JSON(http.StatusBadRequest, http_common.ErrorResponse{
-				Message: "reaction must be 0 or 1",
-			})
-			return
+func (c *Controller) validateAndConvertReactions(ctx *gin.Context, roomID string, stringReactions map[string]int) (map[uuid.UUID]int, bool) {
+	reactions := make(map[uuid.UUID]int, len(stringReactions))
+
+	for movieIDStr, reaction := range stringReactions {
+		if !c.validateReactionValue(ctx, roomID, movieIDStr, reaction) {
+			return nil, false
 		}
 
-		movieUUID, err := uuid.Parse(movieIDStr)
-		if err != nil {
-			c.logger.Error("invalid movie id format",
-				slog.String("room_id", roomID),
-				slog.String("movie_id", movieIDStr),
-				slog.String("error", err.Error()))
-			ctx.JSON(http.StatusBadRequest, http_common.ErrorResponse{
-				Message: "invalid movie id format",
-			})
-			return
+		movieUUID, ok := c.parseMovieID(ctx, roomID, movieIDStr)
+		if !ok {
+			return nil, false
 		}
 
 		reactions[movieUUID] = reaction
 	}
 
-	c.logger.Info("processing vote request",
-		slog.String("room_id", roomID),
-		slog.String("user_id", userUUID.String()),
-		slog.Int("reactions_count", len(reactions)),
-		slog.Any("reactions", reactions))
+	return reactions, true
+}
 
-	err = c.uc.AddReaction(ctx, roomID, userUUID, model.Reactions{Reactions: reactions})
+func (c *Controller) validateReactionValue(ctx *gin.Context, roomID, movieIDStr string, reaction int) bool {
+	if reaction != 0 && reaction != 1 {
+		c.logger.Error("invalid reaction value",
+			slog.String("room_id", roomID),
+			slog.String("movie_id", movieIDStr),
+			slog.Int("reaction", reaction))
+		ctx.JSON(http.StatusBadRequest, http_common.ErrorResponse{
+			Message: "reaction must be 0 or 1",
+		})
+		return false
+	}
+	return true
+}
+
+func (c *Controller) parseMovieID(ctx *gin.Context, roomID, movieIDStr string) (uuid.UUID, bool) {
+	movieUUID, err := uuid.Parse(movieIDStr)
+	if err != nil {
+		c.logger.Error("invalid movie id format",
+			slog.String("room_id", roomID),
+			slog.String("movie_id", movieIDStr),
+			slog.String("error", err.Error()))
+		ctx.JSON(http.StatusBadRequest, http_common.ErrorResponse{
+			Message: "invalid movie id format",
+		})
+		return uuid.Nil, false
+	}
+	return movieUUID, true
+}
+
+func (c *Controller) processVote(ctx *gin.Context, roomID string, userUUID uuid.UUID, reactions map[uuid.UUID]int) bool {
+	err := c.uc.AddReaction(ctx, roomID, userUUID, model.Reactions{Reactions: reactions})
 	if err != nil {
 		c.logger.Error(err.Error())
 		if errors.Is(err, usecase_vote.ErrResourceNotFound) {
 			ctx.JSON(http.StatusNotFound, http_common.ErrorResponse{
 				Message: "not found",
 			})
-			return
+			return false
 		}
 		ctx.JSON(http.StatusInternalServerError, http_common.ErrorResponse{
 			Message: "internal error",
 		})
-		return
+		return false
 	}
+	return true
+}
 
+func (c *Controller) checkReady(ctx *gin.Context, roomID string) {
 	ready, err := c.uc.IsAllReady(ctx, roomID)
 	if err != nil {
 		c.logger.Error(err.Error())
@@ -310,8 +381,6 @@ func (c *Controller) vote(ctx *gin.Context) {
 	}
 
 	if ready {
-		c.hub.NotifyVotingComplete(roomID)
+		_ = c.hub.NotifyVotingComplete(roomID)
 	}
-
-	ctx.Status(http.StatusAccepted)
 }

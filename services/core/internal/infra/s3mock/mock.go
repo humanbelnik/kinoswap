@@ -2,6 +2,7 @@ package s3mock
 
 import (
 	"context"
+	"log"
 	"time"
 
 	"github.com/humanbelnik/kinoswap/core/internal/model"
@@ -14,6 +15,7 @@ func New() *S3Storage {
 }
 
 func (s *S3Storage) Save(ctx context.Context, obj *model.Poster, readyKey *string) (string, error) {
+	log.Println("[MOCKS3]: Save triggered")
 	return "", nil
 }
 

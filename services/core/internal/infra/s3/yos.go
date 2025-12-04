@@ -3,7 +3,6 @@ package infra_s3
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -13,21 +12,10 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
-	"github.com/aws/smithy-go"
 	"github.com/humanbelnik/kinoswap/core/internal/model"
 )
-
-func MustEstabilishConn() *s3.Client {
-	cfg, err := config.LoadDefaultConfig(context.TODO())
-	fmt.Println("AWS REGION", cfg.Region)
-	if err != nil {
-		log.Fatal(err)
-	}
-	return s3.NewFromConfig(cfg)
-}
 
 type S3Storage struct {
 	client *s3.Client
@@ -43,28 +31,22 @@ func New(bucketName string, client *s3.Client, prefix string) (*S3Storage, error
 		prefix:     prefix,
 	}
 
+	// Проверка bucket (работает и с mock)
 	_, err := storage.client.HeadBucket(context.TODO(), &s3.HeadBucketInput{
 		Bucket: aws.String(bucketName),
 	})
 	if err != nil {
-		var apiError smithy.APIError
-		if errors.As(err, &apiError) {
-			switch apiError.(type) {
-			case *types.NotFound:
-				log.Printf("Bucket %v is available.\n", bucketName)
-				err = nil
-			default:
-				log.Printf("Either you don't have access to bucket %v or another error occurred. "+
-					"Here's what happened: %v\n", bucketName, err)
-			}
+		log.Printf("Bucket check: %v", err)
+		// Для mock продолжаем без ошибки
+		if getClientType() == ClientTypeMock {
+			err = nil
 		}
 	} else {
-		log.Printf("Bucket %v exists and you already own it.", bucketName)
+		log.Printf("Bucket %v exists", bucketName)
 	}
 
 	return &storage, err
 }
-
 func (s *S3Storage) buildKey(paths ...string) string {
 	var cleaned []string
 	for _, p := range paths {
@@ -80,7 +62,7 @@ func (s *S3Storage) getFilename(path string) string {
 }
 
 func (s *S3Storage) Save(ctx context.Context, obj *model.Poster, readyKey *string) (string, error) {
-	fmt.Println("HERE!")
+	log.Println("[S3]: Save triggered")
 	var key string
 	if readyKey == nil {
 		key = s.buildKey(s.prefix, obj.GetParent(), obj.GetFilename())

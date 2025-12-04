@@ -39,6 +39,7 @@ ENV MODEL_PATH=/app/model
 USER appuser
 
 EXPOSE 50051
+EXPOSE 5000
 
 VOLUME /app/model
 

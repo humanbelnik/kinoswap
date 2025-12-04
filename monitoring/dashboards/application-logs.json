@@ -1,0 +1,78 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "Application Logs Monitoring",
+    "tags": ["logs", "loki", "application"],
+    "timezone": "browser",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Log Volume by Instance",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "count_over_time({job=~\"api.*\"} [1m])",
+            "legendFormat": "{{instance}}",
+            "refId": "A"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}
+      },
+      {
+        "id": 2,
+        "title": "HTTP Status Codes",
+        "type": "piechart",
+        "targets": [
+          {
+            "expr": "sum by (status) (count_over_time({job=~\"nginx|api.*\"} | json | status >= 200 [5m]))",
+            "refId": "A"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
+      },
+      {
+        "id": 3,
+        "title": "Recent Logs - All Instances",
+        "type": "logs",
+        "targets": [
+          {
+            "expr": "{job=~\"api.*|nginx\"}",
+            "refId": "A",
+            "maxLines": 50
+          }
+        ],
+        "gridPos": {"h": 10, "w": 24, "x": 0, "y": 8}
+      },
+      {
+        "id": 4,
+        "title": "Errors by Instance",
+        "type": "barchart",
+        "targets": [
+          {
+            "expr": "count_over_time({job=~\"api.*\"} |= \"error\" [5m])",
+            "legendFormat": "{{instance}}",
+            "refId": "A"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 18}
+      },
+      {
+        "id": 5,
+        "title": "Request Rate by Instance",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "rate({job=~\"api.*\"} |~ \"request\" [1m])",
+            "legendFormat": "{{instance}}",
+            "refId": "A"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 18}
+      }
+    ],
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    }
+  }
+}

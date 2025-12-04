@@ -5,7 +5,7 @@
         "contact": {},
         "version": "1.0"
     },
-    "host": "localhost:8080",
+    "host": "localhost:80",
     "basePath": "/api/v1/",
     "paths": {
         "/auth": {
@@ -510,17 +510,38 @@
                 "security": [
                     {
                         "UserToken": []
+                    },
+                    {
+                        "UserToken": []
                     }
                 ],
-                "description": "Добавляет реакции пользователя (лайки) к фильмам в рамках комнаты",
+                "description": "Добавляет реакции пользователя (лайки) к фильмам в рамках комнаты\nДобавляет реакции пользователя (лайки) к фильмам в рамках комнаты",
                 "consumes": [
+                    "application/json",
                     "application/json"
                 ],
                 "tags": [
+                    "Voting",
                     "Voting"
                 ],
                 "summary": "Добавление реакций к фильмам",
                 "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Код комнаты",
+                        "name": "room_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Реакции пользователя",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/http_vote.VoteRequestDTO"
+                        }
+                    },
                     {
                         "type": "string",
                         "description": "Код комнаты",

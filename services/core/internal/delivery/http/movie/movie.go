@@ -5,6 +5,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"os"
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
@@ -213,6 +214,7 @@ func (c *Controller) createMovie(ctx *gin.Context) {
 // @Security AdminToken
 // @Router /movies [get]
 func (c *Controller) getMovies(ctx *gin.Context) {
+	ctx.Header("X-port", os.Getenv("HTTP_PORT")) // или ctx.Writer.Header().Set("X-port", c.port)
 	movies, err := c.uc.LoadAll(ctx.Request.Context())
 	if err != nil {
 		c.logger.Error("failed to load movies", slog.String("error", err.Error()))

@@ -26,6 +26,7 @@ func New(
 func (c *Controller) RegisterRoutes(router *gin.RouterGroup) {
 	auth := router.Group("/auth")
 	auth.POST("", c.auth)
+	auth.POST("/validate", c.isValid)
 }
 
 // AuthRequestDTO DTO для запроса аутентификации
@@ -77,5 +78,27 @@ func (c *Controller) auth(ctx *gin.Context) {
 	ctx.Header("X-admin-token", token)
 
 	ctx.Status(http.StatusAccepted)
+}
 
+type ValidateRequest struct {
+	Token string `json:"token" binding:"required"`
+}
+
+type ValidateResponse struct {
+	Valid bool `json:"valid"`
+}
+
+func (c *Controller) isValid(ctx *gin.Context) {
+	var req ValidateRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(400, gin.H{"error": "Invalid request format"})
+		return
+	}
+	valid, err := c.service.IsValid(req.Token)
+	if err != nil {
+		ctx.JSON(500, gin.H{"error": "Internal server error"})
+		return
+	}
+
+	ctx.JSON(200, ValidateResponse{Valid: valid})
 }

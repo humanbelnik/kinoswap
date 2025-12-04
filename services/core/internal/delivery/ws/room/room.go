@@ -112,7 +112,7 @@ func (c *Client) writePump() {
 		}
 	}
 
-	c.conn.WriteMessage(websocket.CloseMessage, []byte{})
+	_ = c.conn.WriteMessage(websocket.CloseMessage, []byte{})
 }
 
 func (c *Client) handleEvent(event Event) {

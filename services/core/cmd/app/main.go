@@ -8,7 +8,7 @@ import (
 
 // @title Kinoswap API
 // @version 1.0
-// @host localhost:8080
+// @host localhost:80
 // @BasePath /api/v1/
 
 // @securityDefinitions.apikey AdminToken

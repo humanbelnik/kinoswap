@@ -517,17 +517,38 @@ const docTemplate = `{
                 "security": [
                     {
                         "UserToken": []
+                    },
+                    {
+                        "UserToken": []
                     }
                 ],
-                "description": "Добавляет реакции пользователя (лайки) к фильмам в рамках комнаты",
+                "description": "Добавляет реакции пользователя (лайки) к фильмам в рамках комнаты\nДобавляет реакции пользователя (лайки) к фильмам в рамках комнаты",
                 "consumes": [
+                    "application/json",
                     "application/json"
                 ],
                 "tags": [
+                    "Voting",
                     "Voting"
                 ],
                 "summary": "Добавление реакций к фильмам",
                 "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Код комнаты",
+                        "name": "room_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Реакции пользователя",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/http_vote.VoteRequestDTO"
+                        }
+                    },
                     {
                         "type": "string",
                         "description": "Код комнаты",
@@ -786,7 +807,7 @@ const docTemplate = `{
 // SwaggerInfo holds exported Swagger Info so clients can modify it
 var SwaggerInfo = &swag.Spec{
 	Version:          "1.0",
-	Host:             "localhost:8080",
+	Host:             "localhost:80",
 	BasePath:         "/api/v1/",
 	Schemes:          []string{},
 	Title:            "Kinoswap API",

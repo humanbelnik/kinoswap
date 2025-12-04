@@ -126,7 +126,7 @@ definitions:
       mm:
         $ref: '#/definitions/model.MovieMeta'
     type: object
-host: localhost:8080
+host: localhost:80
 info:
   contact: {}
   title: Kinoswap API
@@ -462,8 +462,22 @@ paths:
     patch:
       consumes:
       - application/json
-      description: Добавляет реакции пользователя (лайки) к фильмам в рамках комнаты
+      - application/json
+      description: |-
+        Добавляет реакции пользователя (лайки) к фильмам в рамках комнаты
+        Добавляет реакции пользователя (лайки) к фильмам в рамках комнаты
       parameters:
+      - description: Код комнаты
+        in: path
+        name: room_id
+        required: true
+        type: string
+      - description: Реакции пользователя
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/http_vote.VoteRequestDTO'
       - description: Код комнаты
         in: path
         name: room_id
@@ -496,8 +510,10 @@ paths:
             $ref: '#/definitions/http_common.ErrorResponse'
       security:
       - UserToken: []
+      - UserToken: []
       summary: Добавление реакций к фильмам
       tags:
+      - Voting
       - Voting
 securityDefinitions:
   AdminToken:

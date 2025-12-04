@@ -3,6 +3,7 @@ package usecase_movie
 import (
 	"context"
 	"errors"
+	"log"
 	"time"
 
 	"github.com/google/uuid"
@@ -128,6 +129,7 @@ func (b *MovieBuilder) WithPoster(ctx context.Context) *MovieBuilder {
 				Content:  b.movie.Poster.Content,
 				MovieID:  b.movie.Poster.MovieID,
 			}, &strID)
+			//lol
 			if err != nil {
 				return errors.Join(ErrInternal, err)
 			}
@@ -183,6 +185,7 @@ func (b *MovieBuilder) rollback(ctx context.Context, completedOpsCount int) {
 	for i := completedOpsCount; i > -1; i-- {
 		if b.ops[i].rollback != nil {
 			if err := b.ops[i].rollback(ctx); err != nil {
+				log.Println("rollback failed")
 			}
 		}
 	}

@@ -9,7 +9,7 @@
 *.dylib
 git rm -rf .# Test binary, built with `go test -c`
 .env.test
-
+logs/
 *allure*
 # Code coverage profiles and other test artifacts
 *.out
